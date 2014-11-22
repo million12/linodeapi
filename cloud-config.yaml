@@ -1,0 +1,50 @@
+#cloud-config
+
+hostname: hostname
+coreos:
+  update:
+    group: stable
+    reboot-strategy: best-effort
+  
+  etcd:
+    discovery: https://discovery.etcd.io/<token>
+    addr: $private_ipv4:4001
+    peer-addr: $private_ipv4:7001
+    name: name
+  
+  fleet:
+    public-ip: $private_ipv4
+    metadata: name=%H
+  
+  units:
+    - name: etcd.service
+      command: start
+
+    - name: fleet.service
+      command: start
+
+users:
+  - name: username
+    primary-group: wheel
+    groups: [ sudo, docker ]
+    ssh-authorized-keys:
+      - ssh-rsa AAAA*******
+
+write_files:
+# Environment Variables 
+  - path: /etc/environment
+    content: |
+      COREOS_PUBLIC_IPV4=$public_ipv4
+      COREOS_PRIVATE_IPV4=$private_ipv4
+
+# Linode Private network tweak
+  - path: /etc/systemd/network/50-static.network
+    content: |
+      [Match]
+      Name=eth0
+       
+      [Network]
+      Address=$public_ipv4/24
+      Address=$private_ipv4/17
+      Gateway=$gateway.1
+      DNS=8.8.8.8

@@ -1,0 +1,228 @@
+function test_macro
+{
+  echo "This is the test macro the arguments passed are $@"
+}
+
+function toggle_disk_read_only {
+#$1 linode label
+#$2 linode disk label
+
+if [ $HELP -eq 1 ]
+then
+cat <<EOT
+
+Help for macro toggle_disk_read_only
+Requires two arguments
+The first is the Linode label, it is case sensitive but may only be partial, i.e. if your Linode is named "mytoast123" then you can simply use "toast"
+The second argument is the disk label, again it's case sensitive and can be parital
+If the Linode and disk are found then the disk will be marked as read only if it's writable and vice versa
+Example: linode_bash_api -m 'toggle_disk_read_only toast toaster' would toggle the ISREADONLY attribute of the disk toaster on linode toast
+EOT
+return
+fi
+
+if [ -z $1 ]
+then
+  echo "You must specify the linode label"
+  exit 1
+fi
+
+if [ -z $2 ]
+then
+  echo "You must specify the disk label"
+  exit 1
+fi
+
+if [ $VERBOSE -eq 1 ]
+then
+  echo "Toggling readonly attribute of disk $2 on linode $1 read only"
+  echo "Retrieving linode ID"
+fi
+
+COMMAND="linode.list"
+DATA="api_responseFormat=json"
+RESPONSE=`api_request`
+LINODEID=$( echo "$RESPONSE" | sed "s/.*$1[^}]*LINODEID\":\([0-9]*\).*.*/\1/" )
+if [ "$LINODEID" == "$RESPONSE" ]
+then
+ echo "Linode with label containing $1 not found"
+ exit 1
+fi
+
+if [ $VERBOSE -eq 1 ]
+then
+  echo "Retrieving disk ID"
+fi
+
+COMMAND="linode.disk.list"
+DATA="api_responseFormat=json&linodeid=$LINODEID"
+RESPONSE=`api_request`
+declare -a SETTINGS=($( echo "$RESPONSE" | sed "s/.*ISREADONLY\":\([0-1]\).*$2[^}].*DISKID\":\([0-9]*\).*/\1 \2/" ))
+
+if [ "$RESPONSE" == "${SETTINGS[*]}" ]
+then
+ echo "Disk with label $2 not found"
+ exit 1
+fi
+
+COMMAND="linode.disk.update"
+if [ "${SETTINGS[0]}" == "0" ]
+then
+DATA="linodeid=$LINODEID&diskid=${SETTINGS[1]}&isreadonly=1"
+echo "Disk is writable marking read only"
+else
+DATA="linodeid=$LINODEID&diskid=${SETTINGS[1]}&isreadonly=0"
+echo "Disk is readonly marking writable"
+fi
+api_request
+
+}
+
+
+function list_labels_and_ids {
+  COMMAND="linode.list"
+  RESPONSE=`api_request`
+  for l in $RESPONSE
+  do
+    if [[ $l == *LABEL* ]]
+    then
+      echo -n "Label: "
+      echo -n "$l" | sed 's/"LABEL":"\(.*\)"/\1/' | tr -d "\n"
+    fi
+    if [[ $l == *LINODEID* ]]
+    then
+      echo -n " ID: "
+      echo $l | sed 's/"LINODEID"://'
+    fi
+  done
+}
+
+function get_domain_id {
+  #$1 domain
+  
+  if [ $HELP -eq 1 ]
+  then
+  cat <<EOT
+  
+  Help for macro get_domain_id
+  Requires one argument
+  The argument is the domain you wish to get the ID for
+  Example: linode_bash_api -m 'get_domain_id toast.com' returns the ID for the doamin toast.com
+EOT
+  return
+  fi
+  
+  if [ -z $1 ]
+  then
+    echo "You must specify the domain"
+    exit 1
+  fi
+
+  COMMAND="domain.list"
+  RESPONSE=`api_request`
+  for l in $RESPONSE
+  do
+  if [[ $l == *DOMAINID* ]]
+  then
+    ID=$(echo -n "$l" | sed 's/"DOMAINID":\(.*\)/\1/' | tr -d "\n")
+  fi
+  if [[ $l == *DOMAIN* ]] && [[ $l == *$1* ]]
+  then
+    echo $ID
+  fi
+  done
+}
+
+function get_domain_resource_id
+{
+  #$1 domain id
+  #$2 the resource name to get
+  
+  if [ $HELP -eq 1 ]
+  then
+  cat <<EOT
+  
+  Help for macro get_domain_resource_id
+  Requires three arguments
+  The argument is the domain you wish to get the ID for
+  Example: linode_bash_api -m 'get_domain_resource_id toast.com www' returns the resource ID for the doamin www.toast.com
+EOT
+  return
+  fi
+  
+  if [ -z $1 ]
+  then
+    echo "You must specify the domain id"
+    exit 1
+  fi
+  
+  if [ -z $2 ]
+  then
+    echo "You must specify the resource name"
+    exit 1
+  fi
+  
+  COMMAND="domain.resource.list"
+  DATA="domainid=$1"
+  RESPONSE=`api_request`
+  for l in $RESPONSE
+  do
+  if [[ $l == *RESOURCEID* ]]
+  then
+    ID=$(echo -n "$l" | sed 's/"RESOURCEID":\(.*\)/\1/' | tr -d "\n")
+  fi
+  if [[ $l == *NAME* ]] && [[ $l == *$2* ]]
+  then
+    echo $ID
+  fi
+  done
+}
+
+function update_domain_resource_target
+{
+  #$1 domain name
+  #$2 the resource name to get
+  #$3 the new target
+  
+  if [ $HELP -eq 1 ]
+  then
+  cat <<EOT
+  
+  Help for macro update_domain_resource_target
+  Requires three arguments
+  The argument is the domain you wish to get the ID for
+  Example: linode_bash_api -m 'update_domain_resource_target toast.com www 8.8.8.8' sets the target of www.toast.com to 8.8.8.8
+EOT
+  return
+  fi
+  
+  if [ -z $1 ]
+  then
+    echo "You must specify the domain name"
+    exit 1
+  fi
+  
+  if [ -z $2 ]
+  then
+    echo "You must specify the resource name"
+    exit 1
+  fi
+  
+  if [ -z $3 ]
+  then
+    echo "You must specify the new target"
+    exit 1
+  fi
+  
+  DOMAINID=$(get_domain_id $1)
+  RESOURCEID=$(get_domain_resource_id $DOMAINID $2)
+  if [ $VERBOSE -eq 1 ]
+  then
+    echo "Updating $DOMAINID $RESOURCEID to $3"
+  fi
+  COMMAND="domain.resource.update"
+  DATA="domainid=$DOMAINID&resourceid=$RESOURCEID&target=$3"
+  api_request
+  
+  
+}

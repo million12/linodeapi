@@ -1,0 +1,198 @@
+#!/bin/bash
+set -e
+
+APIURL="https://api.linode.com/"
+APIKEY="$LINODE_KEY"
+COMMAND=""
+DATA=""
+VERBOSE=0
+VERSION="20141112"
+MACRO=""
+HELP=0
+QUIET=0
+
+#check if curl is installed
+hash curl 2>/dev/null || { echo "Curl is required but is not installed or not in PATH.  Aborting." >&2; exit 1; }
+
+while getopts "hk:f:c:d:vi:F:m:q" opt; do
+case $opt in
+h)
+#help
+HELP=1
+;;
+k)
+#api key
+APIKEY=$OPTARG
+;;
+f)
+#file for api key
+APIKEY=`head -1 $OPTARG`
+;;
+v)
+#verbose
+VERBOSE=1
+;;
+c)
+COMMAND=$OPTARG
+;;
+d)
+#data for post command
+DATA=$OPTARG
+;;
+i)
+#read data from file, if - read from stdin
+DATA=`cat $OPTARG`
+;;
+m)
+#macro
+MACRO="$OPTARG"
+;;
+F)
+#response format
+DATA="$DATA&api_responseFormat=$OPTARG"
+;;
+q)
+QUIET=1
+;;
+\?)
+#unknown option
+exit 1
+;;
+esac
+done
+
+if [ $HELP -eq 1 ]
+then
+cat <<EOT
+Linode Bash API $VERSION
+options:
+-h      Help
+-v      Verbose
+-F arg     Response format, default bash (easily readable in a shell, formatted from json), options, json wddx or human (html)
+-k arg      API Key to use
+-f arg      File to get API key from, key must be the only string on the first line
+-c arg      The command to run, for a list of commands see http://www.linode.com/api
+-d arg      A quote string containing the data to send in "foo=bar&foo2=bar2" format
+-i arg      Get data from file if  - is used get data from stdin
+-m "arg"    Run a macro, a quote encased string with at least one space separated argument which is the macro name, subsequent arguments will be passed to the macro as arguments. Macros are bash functions kept in /etc/linode_bash_api_macros or ~/.linode_bash_api_macros
+
+If -k or -f are ommited or don't provide an API key then the following loctions are checked
+$HOME/.linode_api
+/etc/linode/api
+
+Details of commands you can run can be found at http://www.linode.com/api/
+EOT
+if [ -z "$MACRO" ]
+then
+$MACRO
+exit 0
+fi
+fi
+
+if [ -z $APIKEY ]
+then
+if [ -f /etc/linode_api ]
+then
+APIKEY=`cat /etc/linode_api`
+fi
+if [ -f $HOME/.linode_api ]
+then
+APIKEY=`cat $HOME/.linode_api`
+fi
+fi
+
+if [ -z $APIKEY ]
+then
+echo "No API key specified" >&2
+exit 1
+fi
+
+if [ -z $COMMAND ] && [ -z "$MACRO" ]
+then
+echo "No command specified" >&2
+exit 1
+fi
+
+function api_request
+{
+
+DATA="$DATA&api_key=$APIKEY&api_action=$COMMAND"
+
+if [ $VERBOSE -eq 1 ]
+then
+echo "Running curl -d $DATA $APIURL" >&2
+fi
+
+RESPONSE=$(curl -s -d "$DATA" "$APIURL")
+
+if [[ $RESPONSE != *\"ERRORARRAY\":\[\]* ]]
+then
+echo "API ERROR!" >&2
+echo "$RESPONSE" | sed 's/.*\(ERRORARRAY[^}]*\).*/\1}]/' >&2
+exit 1
+fi
+
+if [[ $DATA != *api_responseFormat* ]]
+then
+    RESPONSE=$(echo "$RESPONSE" | sed 's/,/ /g' | sed 's/\([{}]\)/ \1 /g')
+    
+    INDENT=0
+    for R in $RESPONSE
+    do
+        if [[ $R == *{* ]]
+        then
+            INDENT=$INDENT+1
+        fi
+        i=0
+        while ((i<INDENT))
+        do
+            echo -n "   "
+            i=$i+1
+        done
+        i=0
+        
+        if [[ $R == *}* ]]
+        then
+            INDENT=$INDENT-1
+        fi
+        
+        echo "$R"
+    done
+
+else
+    echo "$RESPONSE"
+fi
+}
+
+if [ -f /etc/linode_api_macros ]
+then
+    . /etc/linode_api_macros
+fi
+
+if [ -f ~/.linode_api_macros ]
+then
+    . ~/.linode_api_macros
+fi
+
+if [ -z "$MACRO" ]
+then
+    if [ $QUIET -eq 1 ]
+    then
+        api_request > /dev/null
+    else
+        api_request
+    fi
+else
+    if ! type $(echo "$MACRO" | sed 's/ .*//') >/dev/null 2>&1
+    then
+        echo "Invalid macro command"
+        exit 1
+    fi
+    
+    if [ $QUIET -eq 1 ]
+    then
+        $MACRO > /dev/null
+    else
+        $MACRO
+    fi
+fi
