@@ -319,7 +319,7 @@ linodeapi -c linode.disk.create -d LinodeID=$linodeid\&Label=CoreOS\&Type=raw\&S
 linodeapi -c linode.disk.create -d LinodeID=$linodeid\&Label=SWAP\&Type=swap\&Size=$swapspace
 
 # Get All Disks ID's
-diskids=`m12linode -c linode.disk.list -d LINODEID=$linodeid | grep DISKID | sed 's/^.*://' | xargs -n 3 echo | sed 's/ /,/g'`
+diskids=`linodeapi -c linode.disk.list -d LINODEID=$linodeid | grep DISKID | sed 's/^.*://' | xargs -n 3 echo | sed 's/ /,/g'`
 
 # Create Install Profile for Installation of CoreOS
 linodeapi -c linode.config.create -d LINODEID=$linodeid\&Label=Install\&KERNELID=138\&DiskList=$diskids\&RootDeviceNum=1 | grep ConfigID | sed 's/^.*://' > $workdir/install-config-id.txt
