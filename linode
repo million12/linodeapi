@@ -361,4 +361,4 @@ linodeapi -c linode.boot -d LINODEID=$linodeid\&ConfigID=$coreoscfg
 echo "Node $NODE_NAME created and you can now login."
 echo ""
 echo "ssh core@$publicip"
-echo "ssh username@$publicip"
+echo "ssh $USER@$publicip"
