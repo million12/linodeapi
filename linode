@@ -178,7 +178,7 @@ if [ $HELP -eq 1 ]; then
   -h|--help (-h)            help
   -n|--node_name (-n)       Node name (required)
   -p|--node_plan (-p)       Node plan (required)
-  -d|--datacenter_id (-d)   Datacenter of your choice (required)
+  -d|--datacenter (-d)   Datacenter of your choice (required)
   -t|--token (-t)           ETCD Token
 
   CoreOS cloud_config:
