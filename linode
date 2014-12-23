@@ -175,17 +175,17 @@ if [ $HELP -eq 1 ]; then
   Linode Bash API CoreOS Deployment Help
   opnions:
 
-  --help                    help
-  --node_name               Node name (required)
-  --node_plan               Node plan (required)
-  --datacenter_id           Datacenter of your choice
-  --token                   ETCD Token (required)
+  -h|--help (-h)            help
+  -n|--node_name (-n)       Node name (required)
+  -p|--node_plan (-p)       Node plan (required)
+  -d|--datacenter_id (-d)   Datacenter of your choice (required)
+  -t|--token (-t)           ETCD Token
 
   CoreOS cloud_config:
-  --config_github           GitHub cloud-config.yaml file link (requite github api key)
-  --config_file             Local cloud-config.yaml file
+  --config_github (-g)      GitHub cloud-config.yaml file link (either this or -f is required)
+  --config_file (-f)        Local cloud-config.yaml file (either this or -g is required)
 
-$red Get Details From Linode API: $reset
+$yellow Get Details From Linode API: $reset
   --list_plans (-z)         List linode plans
   --list_datacenters (-x)   List linode datacenters
 
