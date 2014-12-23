@@ -273,13 +273,9 @@ workdir="$HOME/linode/$NODE_NAME"
 echo "$PASSWD" > $workdir/password
 # Check if token provided by user. if not generate new one.
 if [ -z $TOKEN ]; then
-  echo ""
-  echo $red"No ETCD token provided. System will generate a new one.$reset"
-  echo ""
-  curl -s http://discovery.etcd.io/new -o $workdir/token
-  sed -i "" 's|https://discovery.etcd.io/||' $workdir/token
-  TOKEN=`cat $workdir/token`
-  echo "New token$green ($TOKEN)$reset generated"
+  echo; echo $red"No ETCD token provided. System will generate a new one.$reset";
+  TOKEN=$(curl -s https://discovery.etcd.io/new | sed "s#https://discovery.etcd.io/##")
+  echo "New token$green ($TOKEN)$reset generated"; echo
 fi
 
 # Create node with provided name
