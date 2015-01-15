@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# Program REPO (devel/master)
-repo="master"
-
 set -e
 #set -u
 
@@ -332,7 +329,7 @@ bootstatus=""
 while [[ $bootstatus != "ok" ]]; do
   echo "Waiting for system to boot."
   #sleep 5
-  bootstatus=`sshpass -p $PASSWD ssh -o ConnectionAttempts=22 -o ConnectTimeout=5 -o StrictHostKeyChecking=no -l root $publicip echo ok 2>&1`
+  bootstatus=`sshpass -p $PASSWD ssh -o ConnectionAttempts=40 -o ConnectTimeout=5 -o StrictHostKeyChecking=no -l root $publicip echo ok 2>&1`
 done
 echo "Systm booted. Jumping to next stage"
 
@@ -348,7 +345,7 @@ if [ ! -z $GHCONFIG ]; then
   echo "File downloaded from GitHub and ready for deployment."
 fi
 # Send CoreOS installation program
-sshpass -p $PASSWD ssh -o StrictHostKeyChecking=no -l root $publicip "curl -s https://raw.githubusercontent.com/million12/linodeapi/$repo/prepare_coreos_boot.sh -o /root/prepare_coreos_boot.sh"
+sshpass -p $PASSWD ssh -o StrictHostKeyChecking=no -l root $publicip "curl -s https://raw.githubusercontent.com/million12/linodeapi/master/prepare_coreos_boot.sh -o /root/prepare_coreos_boot.sh"
 sshpass -p $PASSWD ssh -o StrictHostKeyChecking=no -l root $publicip "chmod +x /root/prepare_coreos_boot.sh"
 
 # Run CoreOS Installation and configuration
