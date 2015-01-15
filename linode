@@ -299,8 +299,9 @@ privateip=`cat $workdir/privateip.txt`
 # Get linode disk space
 diskspace=`linodeapi -c linode.list -d LinodeID=$linodeid | grep TOTALHD | sed 's/^.*://'`
 bootspace=2048
-swapspace=1024
-coreosspace=$(($diskspace - $bootspace - $swapspace))
+swapspace=2048
+coreosspace=2048
+data=$(($diskspace - $bootspace - $swapspace - $coreosspace))
 
 # Create BootOS (Debian)
 linodeapi -c linode.disk.createfromdistribution -d LinodeID=$linodeid\&DistributionID=130\&Label=BootHD\&Size=$bootspace\&rootPass=$PASSWD
@@ -311,8 +312,11 @@ linodeapi -c linode.disk.create -d LinodeID=$linodeid\&Label=CoreOS\&Type=raw\&S
 # Create Swap Partition
 linodeapi -c linode.disk.create -d LinodeID=$linodeid\&Label=SWAP\&Type=swap\&Size=$swapspace
 
+# Create Data Partition
+linodeapi -c linode.disk.create -d LinodeID=$linodeid\&Label=Data\&Type=raw\&Size=$data
+
 # Get All Disks ID's
-diskids=`linodeapi -c linode.disk.list -d LINODEID=$linodeid | grep DISKID | sed 's/^.*://' | xargs -n 3 echo | sed 's/ /,/g'`
+diskids=`linodeapi -c linode.disk.list -d LINODEID=$linodeid | grep DISKID | sed 's/^.*://' | xargs -n 4 echo | sed 's/ /,/g'`
 
 # Create Install Profile for Installation of CoreOS
 linodeapi -c linode.config.create -d LINODEID=$linodeid\&Label=Install\&KERNELID=138\&DiskList=$diskids\&RootDeviceNum=1 | grep ConfigID | sed 's/^.*://' > $workdir/install-config-id.txt
