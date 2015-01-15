@@ -98,14 +98,14 @@ for arg
 do
     delim=""
     case "$arg" in
-       --node_name) args="${args}-n ";;
-       --node_plan) args="${args}-p ";;
+       --node-name) args="${args}-n ";;
+       --node-plan) args="${args}-p ";;
        --datacenter) args="${args}-d ";;
        --token) args="${args}-t ";;
-       --config_github) args="${args}-g ";;
-       --config_local) args="${args}-f ";;
-       --list_plans) args="${args}-z ";;
-       --list_datacenters) args="${args}-x ";;
+       --config-github) args="${args}-g ";;
+       --config-local) args="${args}-f ";;
+       --list-plans) args="${args}-z ";;
+       --list-datacenters) args="${args}-x ";;
        --help) args="${args}-h ";;
 
        # pass through anything else
@@ -173,18 +173,18 @@ if [ $HELP -eq 1 ]; then
   opnions:
 
   -h|--help (-h)            help
-  -n|--node_name (-n)       Node name (required)
-  -p|--node_plan (-p)       Node plan (required)
+  -n|--node-name (-n)       Node name (required)
+  -p|--node-plan (-p)       Node plan (required)
   -d|--datacenter (-d)   Datacenter of your choice (required)
   -t|--token (-t)           ETCD Token
 
   CoreOS cloud_config:
-  --config_github (-g)      GitHub cloud-config.yaml file link (either this or -f is required)
-  --config_file (-f)        Local cloud-config.yaml file (either this or -g is required)
+  --config-github (-g)      GitHub cloud-config.yaml file link (either this or -f is required)
+  --config-file (-f)        Local cloud-config.yaml file (either this or -g is required)
 
 $yellow Get Details From Linode API: $reset
-  --list_plans (-z)         List linode plans
-  --list_datacenters (-x)   List linode datacenters
+  --list-plans (-z)         List linode plans
+  --list-datacenters (-x)   List linode datacenters
 
   For more informations on Linode/Github API keys please go to project page:$blue
   https://github.com/million12/linodeapi$reset
@@ -257,7 +257,7 @@ if [ -z  $FCONFIG ] && [ -z $GHCONFIG ]; then
   echo $red"No GitHub or Local cloud-config.yaml file provided!!!"$reset
   echo ""
   echo "Please provide file with either:"
-  echo $green "--config_local$reset or$green --config_github"$reset
+  echo $green "--config-local$reset or$green --config-github"$reset
   echo ""
   exit 1
 fi
@@ -349,7 +349,7 @@ if [ ! -z $GHCONFIG ]; then
   echo "File downloaded from GitHub and ready for deployment."
 fi
 # Send CoreOS installation program
-sshpass -p $PASSWD ssh -o StrictHostKeyChecking=no -l root $publicip "curl -s https://raw.githubusercontent.com/million12/linodeapi/master/prepare_coreos_boot.sh -o /root/prepare_coreos_boot.sh"
+sshpass -p $PASSWD ssh -o StrictHostKeyChecking=no -l root $publicip "curl -s https://raw.githubusercontent.com/million12/linodeapi/coreos/gluster/prepare_coreos_boot.sh -o /root/prepare_coreos_boot.sh"
 sshpass -p $PASSWD ssh -o StrictHostKeyChecking=no -l root $publicip "chmod +x /root/prepare_coreos_boot.sh"
 
 # Run CoreOS Installation and configuration
