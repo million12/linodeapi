@@ -216,7 +216,7 @@ fi
 if [ -z $NODE_NAME ]; then
   echo ""
   echo -e "No Node$red Name$reset Provided!"
-  echo -e "Please provide node name by using$green --node_name$red node_name$reset"
+  echo -e "Please provide node name by using$green --node-name$red node_name$reset"
   echo ""
   exit 1
 fi
@@ -225,7 +225,7 @@ if [ -z $NODE_PLAN ]; then
   echo -e "Node name: $NODE_NAME$green OK$reset\t"
   echo ""
   echo -e "No Node$red Plan$reset Provided!"
-  echo -e "Please provide node plan by using$green --node_plan$red ID$reset"
+  echo -e "Please provide node plan by using$green --node-plan$red ID$reset"
   echo ""
   # Get list of Plans
   mkdir -p $HOME/linode
