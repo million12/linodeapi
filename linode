@@ -116,46 +116,39 @@ do
       LIST_DATACENTERS=1
       ;;
     -h|--help)
-      HELP=1
+      echo -e "
+      Linode Bash API CoreOS Deployment Help
+      opnions:
+
+      -h|--help (-h)            help
+      -n|--node-name (-n)       Node name (required)
+      -s|--data-size (-s)       Size of data partition (optional)
+      -p|--node-plan (-p)       Node plan (required)
+      -d|--datacenter (-d)      Datacenter of your choice (required)
+      -t|--token (-t)           ETCD Token
+
+      CoreOS cloud_config:
+      --config-github (-g)      GitHub cloud-config.yaml file link (either this or -f is required)
+      --config-local (-f)       Local cloud-config.yaml file (either this or -g is required)
+
+      ${yellow}Get Details From Linode API: $reset
+      --list-plans (-z)         List linode plans
+      --list-datacenters (-x)   List linode datacenters
+
+      For more informations on Linode/Github API keys please go to project page:$blue
+      https://github.com/million12/linodeapi$reset" "\n"
+
+      exit 1
       ;;
-    \?)
-      echo ""
-      echo "Type$red --help$reset or$red -h$reset for all available options."
-      echo ""
+    *)
+      echo "Unknown option ${bold}$i${reset}."
+      echo -e "Type ${bold}--help${reset} or ${bold}-h${reset} for all available options." "\n"
       exit 1;
       ;;
   esac
 done
 
 
-
-# Runtime checks
-if [ "$HELP" == 1 ]; then
-  cat <<EOT
-  Linode Bash API CoreOS Deployment Help
-  opnions:
-
-  -h|--help (-h)            help
-  -n|--node-name (-n)       Node name (required)
-  -s|--data-size (-s)       Size of data partition (optional)
-  -p|--node-plan (-p)       Node plan (required)
-  -d|--datacenter (-d)      Datacenter of your choice (required)
-  -t|--token (-t)           ETCD Token
-
-  CoreOS cloud_config:
-  --config-github (-g)      GitHub cloud-config.yaml file link (either this or -f is required)
-  --config-file (-f)        Local cloud-config.yaml file (either this or -g is required)
-
-$yellow Get Details From Linode API: $reset
-  --list-plans (-z)         List linode plans
-  --list-datacenters (-x)   List linode datacenters
-
-  For more informations on Linode/Github API keys please go to project page:$blue
-  https://github.com/million12/linodeapi$reset
-
-EOT
-exit 1
-fi
 if [ "$LIST_PLANS" == 1 ]; then
   # Get list of Plans
   mkdir -p $HOME/linode
