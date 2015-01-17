@@ -1,18 +1,18 @@
 #!/bin/bash
 
 set -e
-#set -u
+set -u
 
 HELP=0
 NODE_NAME=""
 NODE_PLAN=""
-DATACENTER_ID=""
+DATACENTER=0
 TOKEN=""
 GHCONFIG=""
 FCONFIG=""
 LIST_PLANS=0
 LIST_DATACENTERS=0
-DATA_SIZE=""
+DATA_SIZE="no-data"
 
 # Bash Colors
 red=`tput setaf 1`
@@ -95,92 +95,59 @@ fi
 
 # Options
 # translate long options to short
-for arg
+for i in "$@"
 do
-    delim=""
-    case "$arg" in
-       --node-name) args="${args}-n ";;
-       --node-plan) args="${args}-p ";;
-       --data-size) args="${args}-s ";;
-       --datacenter) args="${args}-d ";;
-       --token) args="${args}-t ";;
-       --config-github) args="${args}-g ";;
-       --config-local) args="${args}-f ";;
-       --list-plans) args="${args}-z ";;
-       --list-datacenters) args="${args}-x ";;
-       --help) args="${args}-h ";;
-
-       # pass through anything else
-       *) [[ "${arg:0:1}" == "-" ]] || delim="\""
-           args="${args}${delim}${arg}${delim} ";;
-    esac
-done
-# reset the translated args
-eval set -- $args
-
-
-
-while getopts "n:p:s:d:t:g:f:z x h " opt; do
-  case $opt in
-    n)
-    #New node name
-    NODE_NAME=$OPTARG
-    ;;
-    p)
-    #Node Size
-    NODE_PLAN=$OPTARG
-    ;;
-    s)
-    #Data Disk size
-    DATA_SIZE=$OPTARG
-    ;;
-    d)
-    #Lista all linode datacenters available
-    DATACENTER=$OPTARG
-    ;;
-    t)
-    #ETCD Token
-    TOKEN=$OPTARG
-    ;;
-    g)
-    #GitHub Cloud Config File
-    GHCONFIG=$OPTARG
-    ;;
-    f)
-    #Local Cloud Config File
-    FCONFIG=$OPTARG
-    ;;
-    z)
-    #Lista all linode plans available
-    LIST_PLANS=1
-    ;;
-    x)
-    #Lista all linode datacenters available
-    LIST_DATACENTERS=1
-    ;;
-    h)
-    #Help
-    HELP=1
-    ;;
+  case $i in
+    -n=*|--node-name=*)
+      NODE_NAME="${i#*=}"
+      ;;
+    -p=*|--node-plan=*)
+      NODE_PLAN="${i#*=}"
+      ;;
+    -s=*|--data-size=*)
+      DATA_SIZE="${i#*=}"
+      ;;
+    -d=*|--datacenter=*)
+      DATACENTER="${i#*=}"
+      ;;
+    -t=*|--token=*)
+      TOKEN="${i#*=}"
+      ;;
+    -g=*|--config-github=*)
+      GHCONFIG="${i#*=}"
+      ;;
+    -f=*|--config-local=*)
+      FCONFIG="${i#*=}"
+      ;;
+    -z=*|--list-plans=*)
+      LIST_PLANS=1
+      ;;
+    -x=*|--list-datacenters=*)
+      LIST_DATACENTERS=1
+      ;;
+    -h|--help)
+      HELP=1
+      ;;
     \?)
-    #unknown option
-    echo ""
-    echo "Type$red --help$reset or$red -h$reset for all available options."
-    echo ""
-    exit 1
-    ;;
+      echo ""
+      echo "Type$red --help$reset or$red -h$reset for all available options."
+      echo ""
+      exit 1;
+      ;;
   esac
 done
 
+
+
 # Runtime checks
-if [ $HELP -eq 1 ]; then
+if [ "$HELP" == 1 ]; then
   cat <<EOT
   Linode Bash API CoreOS Deployment Help
   opnions:
 
   -h|--help (-h)            help
   -n|--node-name (-n)       Node name (required)
-  -s|--data-size (-s)       Size of data partition
+  -s|--data-size (-s)       Size of data partition (optional)
   -p|--node-plan (-p)       Node plan (required)
   -d|--datacenter (-d)      Datacenter of your choice (required)
   -t|--token (-t)           ETCD Token
@@ -199,7 +166,7 @@ $yellow Get Details From Linode API: $reset
 EOT
 exit 1
 fi
-if [ $LIST_PLANS -eq 1 ]; then
+if [ "$LIST_PLANS" == 1 ]; then
   # Get list of Plans
   mkdir -p $HOME/linode
   allplans=`linodeapi -c avail.linodeplans -d api_responseFormat=json > $HOME/linode/allplans`
@@ -212,7 +179,7 @@ if [ $LIST_PLANS -eq 1 ]; then
   rm -rf $HOME/linode/
   exit 1
 fi
-if [ $LIST_DATACENTERS -eq 1 ]; then
+if [ "$LIST_DATACENTERS" == 1 ]; then
   #Get list of datacenters
   allcenters=`linodeapi -c avail.datacenters | grep 'DATACENTERID\|ABBR' | sed 's/^.*://g' | sed 's/"/ /g' | xargs -n2 echo | sed 's/^/Datacenter ID: /'`
   echo "All available Datacenters: "
@@ -241,8 +208,8 @@ if [ -z $NODE_PLAN ]; then
   cores=`jq '.DATA[].CORES' $HOME/linode/allplans | sed 's/^/ Cores: /' > $HOME/linode/cores`
   ram=`jq '.DATA[].RAM' $HOME/linode/allplans | sed 's/^/ RAM: /' | sed 's/$/ MB/' > $HOME//linode/ram`
   price=`jq '.DATA[].HOURLY' $HOME/linode/allplans | sed 's/^/ Price: \$/' | sed 's/$/ p\/h/' > $HOME/linode/price`
-  paste  $HOME/linode/planid $HOME/linode/cores $HOME/linode/ram $HOME/linode/price
-  echo $paste
+  paste $HOME/linode/planid $HOME/linode/cores $HOME/linode/ram $HOME/linode/price
+  #echo $paste
   rm -rf $HOME/linode/
   exit 1
 fi
@@ -259,8 +226,7 @@ if [ -z $DATACENTER ]; then
   echo ""
   exit 1
 fi
-# Check if at least one cloud-config file is provided by user
-if [ -z  $FCONFIG ] && [ -z $GHCONFIG ]; then
+if [ -z  $FCONFIG} ] && [ -z $GHCONFIG} ]; then
   echo ""
   echo $red"No GitHub or Local cloud-config.yaml file provided!!!"$reset
   echo ""
@@ -308,11 +274,9 @@ privateip=`cat $workdir/privateip.txt`
 diskspace=`linodeapi -c linode.list -d LinodeID=$linodeid | grep TOTALHD | sed 's/^.*://'`
 bootspace=2048
 swapspace=2048
-dataspace=$DATA_SIZE
-if [ -n $DATA_SIZE ]; then
-  coreosspace=$(($diskspace - $bootspace - $swapspace - $dataspace))
-else
-  coreosspace=$(($diskspace - $bootspace - $swapspace))
+coreosspace=$(($diskspace - $bootspace - $swapspace))
+if [ "$DATA_SIZE" != "no-data" ]; then
+  coreosspace=$(($diskspace - $bootspace - $swapspace - $DATA_SIZE))
 fi
 
 # Create BootOS (Debian)
@@ -325,7 +289,7 @@ linodeapi -c linode.disk.create -d LinodeID=$linodeid\&Label=CoreOS\&Type=raw\&S
 linodeapi -c linode.disk.create -d LinodeID=$linodeid\&Label=SWAP\&Type=swap\&Size=$swapspace
 
 # Create Data Partition if provided space size by user
-if [ -n $DATA_SIZE ]; then
+if [ "$DATA_SIZE" != "no-data" ]; then
   linodeapi -c linode.disk.create -d LinodeID=$linodeid\&Label=Data\&Type=raw\&Size=$DATA_SIZE
     # Get All Disks ID's
   diskids=`linodeapi -c linode.disk.list -d LINODEID=$linodeid | grep DISKID | sed 's/^.*://' | xargs -n 4 echo | sed 's/ /,/g'`
@@ -345,11 +309,11 @@ coreoscfg=`cat $workdir/coreos-config-id.txt`
 ## Boot Installation
 linodeapi -c linode.boot -d LINODEID=$linodeid\&ConfigID=$instcfg
 #Waiting for system to boot
-bootstatus=""
+bootstatus="wait"
 while [[ $bootstatus != "ok" ]]; do
   echo "Waiting for system to boot."
   #sleep 5
-  bootstatus=`sshpass -p $PASSWD ssh -o ConnectionAttempts=40 -o ConnectTimeout=5 -o StrictHostKeyChecking=no -l root $publicip echo ok 2>&1`
+  bootstatus=`sshpass -p $PASSWD ssh -o ConnectionAttempts=100 -o ConnectTimeout=5 -o StrictHostKeyChecking=no -l root $publicip echo ok 2>&1`
 done
 echo "Systm booted. Jumping to next stage"
 
