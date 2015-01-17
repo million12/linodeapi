@@ -12,6 +12,7 @@ GHCONFIG=""
 FCONFIG=""
 LIST_PLANS=0
 LIST_DATACENTERS=0
+DATA_SIZE=""
 
 # Bash Colors
 red=`tput setaf 1`
@@ -100,6 +101,7 @@ do
     case "$arg" in
        --node-name) args="${args}-n ";;
        --node-plan) args="${args}-p ";;
+       --data-size) args="${args}-s ";;
        --datacenter) args="${args}-d ";;
        --token) args="${args}-t ";;
        --config-github) args="${args}-g ";;
@@ -118,7 +120,7 @@ eval set -- $args
 
 
 
-while getopts "n:p:d:t:g:f:z x h" opt; do
+while getopts "n:p:s:d:t:g:f:z x h " opt; do
   case $opt in
     n)
     #New node name
@@ -127,6 +129,10 @@ while getopts "n:p:d:t:g:f:z x h" opt; do
     p)
     #Node Size
     NODE_PLAN=$OPTARG
+    ;;
+    s)
+    #Data Disk size
+    DATA_SIZE=$OPTARG
     ;;
     d)
     #Lista all linode datacenters available
@@ -174,8 +180,9 @@ if [ $HELP -eq 1 ]; then
 
   -h|--help (-h)            help
   -n|--node-name (-n)       Node name (required)
+  -s|--data-size (-s)       Size of data partition
   -p|--node-plan (-p)       Node plan (required)
-  -d|--datacenter (-d)   Datacenter of your choice (required)
+  -d|--datacenter (-d)      Datacenter of your choice (required)
   -t|--token (-t)           ETCD Token
 
   CoreOS cloud_config:
@@ -216,7 +223,7 @@ fi
 if [ -z $NODE_NAME ]; then
   echo ""
   echo -e "No Node$red Name$reset Provided!"
-  echo -e "Please provide node name by using$green --node-name$red node_name$reset"
+  echo -e "Please provide node name by using$green --node-name$red node-name$reset"
   echo ""
   exit 1
 fi
@@ -239,6 +246,7 @@ if [ -z $NODE_PLAN ]; then
   rm -rf $HOME/linode/
   exit 1
 fi
+
 # Check if datacenter id provided by user
 if [ -z $DATACENTER ]; then
   echo ""
@@ -300,8 +308,12 @@ privateip=`cat $workdir/privateip.txt`
 diskspace=`linodeapi -c linode.list -d LinodeID=$linodeid | grep TOTALHD | sed 's/^.*://'`
 bootspace=2048
 swapspace=2048
-coreosspace=2048
-data=$(($diskspace - $bootspace - $swapspace - $coreosspace))
+dataspace=$DATA_SIZE
+if [ -n $DATA_SIZE ]; then
+  coreosspace=$(($diskspace - $bootspace - $swapspace - $dataspace))
+else
+  coreosspace=$(($diskspace - $bootspace - $swapspace))
+fi
 
 # Create BootOS (Debian)
 linodeapi -c linode.disk.createfromdistribution -d LinodeID=$linodeid\&DistributionID=130\&Label=BootHD\&Size=$bootspace\&rootPass=$PASSWD
@@ -312,11 +324,15 @@ linodeapi -c linode.disk.create -d LinodeID=$linodeid\&Label=CoreOS\&Type=raw\&S
 # Create Swap Partition
 linodeapi -c linode.disk.create -d LinodeID=$linodeid\&Label=SWAP\&Type=swap\&Size=$swapspace
 
-# Create Data Partition
-linodeapi -c linode.disk.create -d LinodeID=$linodeid\&Label=Data\&Type=raw\&Size=$data
-
-# Get All Disks ID's
-diskids=`linodeapi -c linode.disk.list -d LINODEID=$linodeid | grep DISKID | sed 's/^.*://' | xargs -n 4 echo | sed 's/ /,/g'`
+# Create Data Partition if provided space size by user
+if [ -n $DATA_SIZE ]; then
+  linodeapi -c linode.disk.create -d LinodeID=$linodeid\&Label=Data\&Type=raw\&Size=$DATA_SIZE
+    # Get All Disks ID's
+  diskids=`linodeapi -c linode.disk.list -d LINODEID=$linodeid | grep DISKID | sed 's/^.*://' | xargs -n 4 echo | sed 's/ /,/g'`
+else
+    # Get All Disks ID's
+  diskids=`linodeapi -c linode.disk.list -d LINODEID=$linodeid | grep DISKID | sed 's/^.*://' | xargs -n 3 echo | sed 's/ /,/g'`
+fi
 
 # Create Install Profile for Installation of CoreOS
 linodeapi -c linode.config.create -d LINODEID=$linodeid\&Label=Install\&KERNELID=138\&DiskList=$diskids\&RootDeviceNum=1 | grep ConfigID | sed 's/^.*://' > $workdir/install-config-id.txt
@@ -349,7 +365,7 @@ if [ ! -z $GHCONFIG ]; then
   echo "File downloaded from GitHub and ready for deployment."
 fi
 # Send CoreOS installation program
-sshpass -p $PASSWD ssh -o StrictHostKeyChecking=no -l root $publicip "curl -s https://raw.githubusercontent.com/million12/linodeapi/coreos/gluster/prepare_coreos_boot.sh -o /root/prepare_coreos_boot.sh"
+sshpass -p $PASSWD ssh -o StrictHostKeyChecking=no -l root $publicip "curl -s https://raw.githubusercontent.com/million12/linodeapi/master/prepare_coreos_boot.sh -o /root/prepare_coreos_boot.sh"
 sshpass -p $PASSWD ssh -o StrictHostKeyChecking=no -l root $publicip "chmod +x /root/prepare_coreos_boot.sh"
 
 # Run CoreOS Installation and configuration

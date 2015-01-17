@@ -23,5 +23,5 @@ rm -rf /boot/grub
 mount /dev/xvdb1 /mnt/core-boot
 mv /mnt/core-boot/boot/grub /boot
 
-sed -i 's/hd0/hd2/g' /boot/grub/menu.lst
+sed -i 's/hd0/hd1/g' /boot/grub/menu.lst
 echo "CoreOS Installed"
