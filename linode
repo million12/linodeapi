@@ -23,40 +23,30 @@ white=`tput setaf 7`
 bold=`tput bold`
 reset=`tput sgr0`
 
-# Check if Required programs are installed
-if ! [ -x "$(command -v curl)" ]; then
-  echo ""
-  echo $red"'curl' not installed!!$reset   Please install curl. ($green yum install curl$reset or$green apt-get install curl$reset)"
-  echo ""
-  exit 1
-fi
-if ! [ -x "$(command -v pwgen)" ]; then
-  echo ""
-  echo $red"'pwgen' not installed!!$reset   Please install pwgen. ($green yum install pwgen$reset or$green apt-get install pwgen$reset)"
-  echo "Mac Users install ising brew$green brew install pwgen$reset"
-  echo ""
-  exit 1
-fi
-if ! [ -x "$(command -v sshpass)" ]; then
-  echo ""
-  echo $red"'sshpass' not installed!!$reset   Please install sshpass. ($green yum install sshpass$reset or$green apt-get install sshpass$reset)"
-  echo "Mac Users install ising brew$green brew install https://raw.github.com/eugeneoden/homebrew/eca9de1/Library/Formula/sshpass.rb$reset"
-  echo ""
-  exit 1
-fi
-if ! [ -x "$(command -v sudo)" ]; then
-  echo ""
-  echo $red"'sudo' not installed!!$reset   Please install sudo. ($green yum install sudo$reset or$green apt-get install sudo$reset)"
-  echo ""
-  exit 1
-fi
-if ! [ -x "$(command -v jq)" ]; then
-  echo ""
-  echo $red"'jq' not installed!!$reset   Please install jq. ($green yum install jq$reset or$green apt-get install jq$reset)"
-  echo "Mac Users install using brew$green brew install jq$reset"
-  echo ""
-  exit 1
-fi
+
+
+
+#########################################################
+# Verify that command is installed
+# Arguments:
+#   String: command name
+#########################################################
+function assert_command_installed() {
+  if [ ! $(command -v $1) ]; then
+    echo -e "${red}Command *$1* not installed. Please install it.$reset" "\n"
+    exit 1
+  fi
+}
+
+
+
+
+
+# Make sure we have all required command installed
+for required_cmd in curl pwgen sshpass sudo jq
+do
+  assert_command_installed $required_cmd
+done
 
 # Check if GitHub and Linod API Keys are installed on your system
 if [ "$LINODE_KEY" == "" ]; then
