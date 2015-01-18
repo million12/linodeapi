@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 
+CWD=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 APIURL="https://api.linode.com/"
 APIKEY="$LINODE_KEY"
 COMMAND=""
@@ -135,7 +136,7 @@ fi
 if [[ $DATA != *api_responseFormat* ]]
 then
     RESPONSE=$(echo "$RESPONSE" | sed 's/,/ /g' | sed 's/\([{}]\)/ \1 /g')
-    
+
     INDENT=0
     for R in $RESPONSE
     do
@@ -150,12 +151,12 @@ then
             i=$i+1
         done
         i=0
-        
+
         if [[ $R == *}* ]]
         then
             INDENT=$INDENT-1
         fi
-        
+
         echo "$R"
     done
 
@@ -164,15 +165,7 @@ else
 fi
 }
 
-if [ -f /etc/linode_api_macros ]
-then
-    . /etc/linode_api_macros
-fi
-
-if [ -f ~/.linode_api_macros ]
-then
-    . ~/.linode_api_macros
-fi
+source $CWD/linode_api_macro
 
 if [ -z "$MACRO" ]
 then
@@ -188,7 +181,7 @@ else
         echo "Invalid macro command"
         exit 1
     fi
-    
+
     if [ $QUIET -eq 1 ]
     then
         $MACRO > /dev/null

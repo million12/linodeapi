@@ -3,27 +3,6 @@
 set -e
 set -u
 
-HELP=0
-NODE_NAME=""
-NODE_PLAN=""
-DATACENTER=0
-TOKEN=""
-CLOUD_CONFIG_CONTENT=""
-LIST_PLANS=0
-LIST_DATACENTERS=0
-DATA_SIZE="no-data"
-
-# Bash Colors
-red=`tput setaf 1`
-green=`tput setaf 2`
-blue=`tput setaf 4`
-yellow=`tput setaf 3`
-white=`tput setaf 7`
-bold=`tput bold`
-reset=`tput sgr0`
-
-
-
 
 #######################################
 # Echo/log function
@@ -56,6 +35,45 @@ function assert_command_installed() {
   fi
 }
 
+#########################################################
+# Resolve this script (./linode) real path, even
+# if it is a symlink. We need it to correctly point
+# the ./$LINODEAPI file, which is expected to be
+# next to this file.
+#
+# Source: http://stackoverflow.com/questions/59895/can-a-bash-script-tell-what-directory-its-stored-in
+#########################################################
+function resolve_current_script_dir() {
+  local source="${BASH_SOURCE[0]}"
+  local dir=""
+  while [ -h "$source" ]; do
+    dir="$( cd -P "$( dirname "$source" )" && pwd )"
+    source="$(readlink "$source")"
+    [[ $source != /* ]] && source="$dir/$source"
+  done
+  echo "$( cd -P "$( dirname "$source" )" && pwd )"
+}
+
+
+SCRIPT_DIR=$(resolve_current_script_dir) # script dir (if symlink, it will be resolved to the target)
+LINODEAPI="$SCRIPT_DIR/linodeapi"
+NODE_NAME=""
+NODE_PLAN=""
+DATACENTER=0
+TOKEN=""
+CLOUD_CONFIG_CONTENT=""
+LIST_PLANS=0
+LIST_DATACENTERS=0
+DATA_SIZE="no-data"
+
+# Bash Colors
+red=`tput setaf 1`
+green=`tput setaf 2`
+yellow=`tput setaf 3`
+white=`tput setaf 7`
+bold=`tput bold`
+reset=`tput sgr0`
+
 
 
 
@@ -85,17 +103,6 @@ if [ "$GITHUB_KEY" == "" ]; then
   exit 1
 fi
 
-# Check if API is installed on your machine
-if [ ! -f /usr/local/bin/linodeapi ]; then
-  echo ""
-  echo "Linode API not present in your system"
-  echo "Attempting to install Linode API main program"
-  curl -s "https://raw.githubusercontent.com/million12/linodeapi/$repo/linodeapi" -o /usr/local/bin/linodeapi
-  sudo curl -s "https://raw.githubusercontent.com/million12/linodeapi/$repo/linode_api_macro" -o /etc/linode_api_macro
-  chmod +x /usr/local/bin/linodeapi
-  echo "Linode API Installed Successfully"
-  echo ----------------------------
-fi
 
 # Options
 # translate long options to short
@@ -145,8 +152,8 @@ do
       --list-plans (-z)         List linode plans
       --list-datacenters (-x)   List linode datacenters
 
-      For more informations on Linode/Github API keys please go to project page:$blue
-      https://github.com/million12/linodeapi$reset" "\n"
+      For more informations on Linode/Github API keys please go to project page:
+      ${white}https://github.com/million12/linodeapi$reset" "\n"
 
       exit 1
       ;;
@@ -162,7 +169,7 @@ done
 if [ "$LIST_PLANS" == 1 ]; then
   # Get list of Plans
   mkdir -p $HOME/linode
-  allplans=`linodeapi -c avail.linodeplans -d api_responseFormat=json > $HOME/linode/allplans`
+  allplans=`$LINODEAPI -c avail.linodeplans -d api_responseFormat=json > $HOME/linode/allplans`
   planid=`jq '.DATA[].PLANID' $HOME/linode/allplans | sed 's/^/Planid: /'> $HOME/linode/planid`
   cores=`jq '.DATA[].CORES' $HOME/linode/allplans | sed 's/^/ Cores: /' > $HOME/linode/cores`
   ram=`jq '.DATA[].RAM' $HOME/linode/allplans | sed 's/^/ RAM: /' | sed 's/$/ MB/' > $HOME//linode/ram`
@@ -174,7 +181,7 @@ if [ "$LIST_PLANS" == 1 ]; then
 fi
 if [ "$LIST_DATACENTERS" == 1 ]; then
   #Get list of datacenters
-  allcenters=`linodeapi -c avail.datacenters | grep 'DATACENTERID\|ABBR' | sed 's/^.*://g' | sed 's/"/ /g' | xargs -n2 echo | sed 's/^/Datacenter ID: /'`
+  allcenters=`$LINODEAPI -c avail.datacenters | grep 'DATACENTERID\|ABBR' | sed 's/^.*://g' | sed 's/"/ /g' | xargs -n2 echo | sed 's/^/Datacenter ID: /'`
   log "All available Datacenters: "
   echo "$allcenters"
   exit 1
@@ -196,7 +203,7 @@ if [ -z $NODE_PLAN ]; then
   echo ""
   # Get list of Plans
   mkdir -p $HOME/linode
-  allplans=`linodeapi -c avail.linodeplans -d api_responseFormat=json > $HOME/linode/allplans`
+  allplans=`$LINODEAPI -c avail.linodeplans -d api_responseFormat=json > $HOME/linode/allplans`
   planid=`jq '.DATA[].PLANID' $HOME/linode/allplans | sed 's/^/Planid: /'> $HOME/linode/planid`
   cores=`jq '.DATA[].CORES' $HOME/linode/allplans | sed 's/^/ Cores: /' > $HOME/linode/cores`
   ram=`jq '.DATA[].RAM' $HOME/linode/allplans | sed 's/^/ RAM: /' | sed 's/$/ MB/' > $HOME//linode/ram`
@@ -213,7 +220,7 @@ if [ -z $DATACENTER ]; then
   echo -e "No$red Datacenter ID$reset Provided!"
   echo -e "Please provide datacenter id by using$green --datacenter$red ID$reset"
   echo ""
-  allcenters=`linodeapi -c avail.datacenters | grep 'DATACENTERID\|ABBR' | sed 's/^.*://g' | sed 's/"/ /g' | xargs -n2 echo | sed 's/^/Datacenter ID: /'`
+  allcenters=`$LINODEAPI -c avail.datacenters | grep 'DATACENTERID\|ABBR' | sed 's/^.*://g' | sed 's/"/ /g' | xargs -n2 echo | sed 's/^/Datacenter ID: /'`
   echo "All available Datacenters: "
   echo "$allcenters"
   echo ""
@@ -246,28 +253,28 @@ if [ -z $TOKEN ]; then
 fi
 
 # Create node with provided name
-linodeapi -c linode.create -d DATACENTERID=$DATACENTER\&PLANID=$NODE_PLAN | grep LinodeID | sed 's/^.*://' > $workdir/nodeid.txt
+$LINODEAPI -c linode.create -d DATACENTERID=$DATACENTER\&PLANID=$NODE_PLAN | grep LinodeID | sed 's/^.*://' > $workdir/nodeid.txt
 
 # Get Linode ID
 linodeid=`cat $workdir/nodeid.txt`
 
 # Rename ndoe to user specific
-linodeapi -c linode.update -d LINODEID=$linodeid\&LABEL=$NODE_NAME
+$LINODEAPI -c linode.update -d LINODEID=$linodeid\&LABEL=$NODE_NAME
 
 # Get linode Public IP
-linodeapi -c linode.ip.list -d LinodeID=$linodeid | grep IPADDRESS | grep -v IPADDRESSID | sed 's/^.*:"//' | sed 's/"//' > $workdir/publicip.txt
+$LINODEAPI -c linode.ip.list -d LinodeID=$linodeid | grep IPADDRESS | grep -v IPADDRESSID | sed 's/^.*:"//' | sed 's/"//' > $workdir/publicip.txt
 publicip=`cat $workdir/publicip.txt`
 
 #Get Linode Gateway
-linodeapi -c linode.ip.list -d LinodeID=$linodeid | grep IPADDRESS | grep -v IPADDRESSID | sed 's|^.*:"||' | sed 's/"//' | sed 's/\./ /g' | awk -v OFS=. '{print $1, $2, $3}' > $workdir/gateway.txt
+$LINODEAPI -c linode.ip.list -d LinodeID=$linodeid | grep IPADDRESS | grep -v IPADDRESSID | sed 's|^.*:"||' | sed 's/"//' | sed 's/\./ /g' | awk -v OFS=. '{print $1, $2, $3}' > $workdir/gateway.txt
 gateway=`cat $workdir/gateway.txt`
 
 # Add Private network interface
-linodeapi -c linode.ip.addprivate -d LINODEID=$linodeid | grep IPADDRESS | grep -v IPADDRESSID | sed 's/^.*:"//' | sed 's/"//' > $workdir/privateip.txt
+$LINODEAPI -c linode.ip.addprivate -d LINODEID=$linodeid | grep IPADDRESS | grep -v IPADDRESSID | sed 's/^.*:"//' | sed 's/"//' > $workdir/privateip.txt
 privateip=`cat $workdir/privateip.txt`
 
 # Get linode disk space
-diskspace=`linodeapi -c linode.list -d LinodeID=$linodeid | grep TOTALHD | sed 's/^.*://'`
+diskspace=`$LINODEAPI -c linode.list -d LinodeID=$linodeid | grep TOTALHD | sed 's/^.*://'`
 bootspace=2048
 swapspace=2048
 coreosspace=$(($diskspace - $bootspace - $swapspace))
@@ -276,34 +283,34 @@ if [ "$DATA_SIZE" != "no-data" ]; then
 fi
 
 # Create BootOS (Debian)
-linodeapi -c linode.disk.createfromdistribution -d LinodeID=$linodeid\&DistributionID=130\&Label=BootHD\&Size=$bootspace\&rootPass=$PASSWD
+$LINODEAPI -c linode.disk.createfromdistribution -d LinodeID=$linodeid\&DistributionID=130\&Label=BootHD\&Size=$bootspace\&rootPass=$PASSWD
 
 # Create CoreOS Partition
-linodeapi -c linode.disk.create -d LinodeID=$linodeid\&Label=CoreOS\&Type=raw\&Size=$coreosspace
+$LINODEAPI -c linode.disk.create -d LinodeID=$linodeid\&Label=CoreOS\&Type=raw\&Size=$coreosspace
 
 # Create Swap Partition
-linodeapi -c linode.disk.create -d LinodeID=$linodeid\&Label=SWAP\&Type=swap\&Size=$swapspace
+$LINODEAPI -c linode.disk.create -d LinodeID=$linodeid\&Label=SWAP\&Type=swap\&Size=$swapspace
 
 # Create Data Partition if provided space size by user
 if [ "$DATA_SIZE" != "no-data" ]; then
-  linodeapi -c linode.disk.create -d LinodeID=$linodeid\&Label=Data\&Type=raw\&Size=$DATA_SIZE
+  $LINODEAPI -c linode.disk.create -d LinodeID=$linodeid\&Label=Data\&Type=raw\&Size=$DATA_SIZE
     # Get All Disks ID's
-  diskids=`linodeapi -c linode.disk.list -d LINODEID=$linodeid | grep DISKID | sed 's/^.*://' | xargs -n 4 echo | sed 's/ /,/g'`
+  diskids=`$LINODEAPI -c linode.disk.list -d LINODEID=$linodeid | grep DISKID | sed 's/^.*://' | xargs -n 4 echo | sed 's/ /,/g'`
 else
     # Get All Disks ID's
-  diskids=`linodeapi -c linode.disk.list -d LINODEID=$linodeid | grep DISKID | sed 's/^.*://' | xargs -n 3 echo | sed 's/ /,/g'`
+  diskids=`$LINODEAPI -c linode.disk.list -d LINODEID=$linodeid | grep DISKID | sed 's/^.*://' | xargs -n 3 echo | sed 's/ /,/g'`
 fi
 
 # Create Install Profile for Installation of CoreOS
-linodeapi -c linode.config.create -d LINODEID=$linodeid\&Label=Install\&KERNELID=138\&DiskList=$diskids\&RootDeviceNum=1 | grep ConfigID | sed 's/^.*://' > $workdir/install-config-id.txt
+$LINODEAPI -c linode.config.create -d LINODEID=$linodeid\&Label=Install\&KERNELID=138\&DiskList=$diskids\&RootDeviceNum=1 | grep ConfigID | sed 's/^.*://' > $workdir/install-config-id.txt
 instcfg=`cat $workdir/install-config-id.txt`
 
 # Create CoreOS Profile for booting operational version.
-linodeapi -c linode.config.create -d LINODEID=$linodeid\&Label=CoreOS\&KERNELID=95\&DiskList=$diskids\&RootDeviceNum=1 | grep ConfigID | sed 's/^.*://' > $workdir/coreos-config-id.txt
+$LINODEAPI -c linode.config.create -d LINODEID=$linodeid\&Label=CoreOS\&KERNELID=95\&DiskList=$diskids\&RootDeviceNum=1 | grep ConfigID | sed 's/^.*://' > $workdir/coreos-config-id.txt
 coreoscfg=`cat $workdir/coreos-config-id.txt`
 
 ## Boot Installation
-linodeapi -c linode.boot -d LINODEID=$linodeid\&ConfigID=$instcfg
+$LINODEAPI -c linode.boot -d LINODEID=$linodeid\&ConfigID=$instcfg
 #Waiting for system to boot
 bootstatus=""
 while [[ $bootstatus != "ok" ]]; do
@@ -325,9 +332,9 @@ sshpass -p $PASSWD ssh -o StrictHostKeyChecking=no -l root $publicip "chmod +x /
 # Run CoreOS Installation and configuration
 sshpass -p $PASSWD ssh -o StrictHostKeyChecking=no -l root $publicip "/root/prepare_coreos_boot.sh $publicip $privateip $gateway $TOKEN"
 # Shutdown Boot Install
-linodeapi -c linode.shutdown -d LinodeID=$linodeid
+$LINODEAPI -c linode.shutdown -d LinodeID=$linodeid
 # Boot into CoreOS
-linodeapi -c linode.boot -d LINODEID=$linodeid\&ConfigID=$coreoscfg
+$LINODEAPI -c linode.boot -d LINODEID=$linodeid\&ConfigID=$coreoscfg
 
 #
 # Print summary info
