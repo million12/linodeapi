@@ -3,6 +3,13 @@
 set -e
 set -u
 
+# Bash Colors
+red=`tput setaf 1`
+green=`tput setaf 2`
+yellow=`tput setaf 3`
+white=`tput setaf 7`
+bold=`tput bold`
+reset=`tput sgr0`
 
 #######################################
 # Echo/log function
@@ -54,55 +61,56 @@ function resolve_current_script_dir() {
   echo "$( cd -P "$( dirname "$source" )" && pwd )"
 }
 
+#########################################################
+# Lists plans available on Linode
+#########################################################
+function list_plans() {
+  local allplans=$($LINODEAPI -c avail.linodeplans -d api_responseFormat=json)
+  local planid=$(echo $allplans | jq '.DATA[].PLANID' | sed 's/^/Planid: /')
+  local cores=$(echo $allplans | jq '.DATA[].CORES' | sed 's/^/ Cores: /')
+  local ram=$(echo $allplans | jq '.DATA[].RAM' | sed 's/^/ RAM: /' | sed 's/$/ MB/')
+  local price=$(echo $allplans | jq '.DATA[].HOURLY' | sed 's/^/ Price: \$/' | sed 's/$/ p\/h/')
+  paste <(echo "$planid") <(echo "$cores") <(echo "$ram") <(echo "$price")
+}
 
+#########################################################
+# Lists data centers available on Linode
+#########################################################
+function list_datacenters() {
+  echo "$($LINODEAPI -c avail.datacenters | grep 'DATACENTERID\|ABBR' | sed 's/^.*://g' | sed 's/"/ /g' | xargs -n2 echo | sed 's/^/Datacenter ID: /')"
+}
+
+
+# Internal variables
 SCRIPT_DIR=$(resolve_current_script_dir) # script dir (if symlink, it will be resolved to the target)
 LINODEAPI="$SCRIPT_DIR/linodeapi"
+
+# ENV variables provided by user
+LINODE_KEY=${LINODE_KEY:=""}
+
+# Internal variables
 NODE_NAME=""
 NODE_PLAN=""
-DATACENTER=0
+DATACENTER=""
 TOKEN=""
 CLOUD_CONFIG_CONTENT=""
-LIST_PLANS=0
-LIST_DATACENTERS=0
 DATA_SIZE="no-data"
-
-# Bash Colors
-red=`tput setaf 1`
-green=`tput setaf 2`
-yellow=`tput setaf 3`
-white=`tput setaf 7`
-bold=`tput bold`
-reset=`tput sgr0`
-
 
 
 
 
 # Make sure we have all required command installed
-for required_cmd in curl pwgen sshpass sudo jq
-do
+for required_cmd in curl pwgen sshpass sudo jq; do
   assert_command_installed $required_cmd
 done
 
 # Check if GitHub and Linod API Keys are installed on your system
-if [ "$LINODE_KEY" == "" ]; then
+if [[ -z $LINODE_KEY ]]; then
   error "Linode API key environmental variable not set!" "\n" \
     "Please add into your .bashrc file " "\n" "\"export LINODE_KEY=your-Key\"" "\n" \
     "See Linode manual for more info: https://www.linode.com/api"
   exit 1
 fi
-
-if [ "$GITHUB_KEY" == "" ]; then
-  echo ""
-  echo $red"GitHub API key environmental variable not set$reset"
-  echo "GitHub Manual: https://help.github.com/articles/creating-an-access-token-for-command-line-use/"
-  echo ""
-  echo "Add into your .bashrc file "
-  echo "\"export GITHUB_KEY=your-Key\""
-  echo ""
-  exit 1
-fi
-
 
 # Options
 # translate long options to short
@@ -128,10 +136,14 @@ do
       CLOUD_CONFIG_CONTENT="${i#*=}"
       ;;
     -z*|--list-plans*)
-      LIST_PLANS=1
+      log "Available Linode plans:"
+      list_plans
+      exit 0
       ;;
     -x*|--list-datacenters*)
-      LIST_DATACENTERS=1
+      log "Available Linode data centers:"
+      list_datacenters
+      exit 0
       ;;
     -h|--help)
       echo -e "
@@ -166,69 +178,28 @@ do
 done
 
 
-if [ "$LIST_PLANS" == 1 ]; then
-  # Get list of Plans
-  mkdir -p $HOME/linode
-  allplans=`$LINODEAPI -c avail.linodeplans -d api_responseFormat=json > $HOME/linode/allplans`
-  planid=`jq '.DATA[].PLANID' $HOME/linode/allplans | sed 's/^/Planid: /'> $HOME/linode/planid`
-  cores=`jq '.DATA[].CORES' $HOME/linode/allplans | sed 's/^/ Cores: /' > $HOME/linode/cores`
-  ram=`jq '.DATA[].RAM' $HOME/linode/allplans | sed 's/^/ RAM: /' | sed 's/$/ MB/' > $HOME//linode/ram`
-  price=`jq '.DATA[].HOURLY' $HOME/linode/allplans | sed 's/^/ Price: \$/' | sed 's/$/ p\/h/' > $HOME/linode/price`
-  paste  $HOME/linode/planid $HOME/linode/cores $HOME/linode/ram $HOME/linode/price
-  echo $paste
-  rm -rf $HOME/linode/
-  exit 1
-fi
-if [ "$LIST_DATACENTERS" == 1 ]; then
-  #Get list of datacenters
-  allcenters=`$LINODEAPI -c avail.datacenters | grep 'DATACENTERID\|ABBR' | sed 's/^.*://g' | sed 's/"/ /g' | xargs -n2 echo | sed 's/^/Datacenter ID: /'`
-  log "All available Datacenters: "
-  echo "$allcenters"
-  exit 1
-fi
 # Check if node name provided by user
-if [ -z $NODE_NAME ]; then
-  echo ""
-  echo -e "No Node$red Name$reset Provided!"
-  echo -e "Please provide node name by using$green --node-name$red node-name$reset"
-  echo ""
+if [[ -z $NODE_NAME ]]; then
+  error "Node name not provided." "\n" "Please provide node name using --node-name=YOUR_NODE_NAME" "\n"
   exit 1
 fi
 # Check if node plan provided by user
-if [ -z $NODE_PLAN ]; then
-  echo -e "Node name: $NODE_NAME$green OK$reset\t"
-  echo ""
-  echo -e "No Node$red Plan$reset Provided!"
-  echo -e "Please provide node plan by using$green --node-plan$red ID$reset"
-  echo ""
-  # Get list of Plans
-  mkdir -p $HOME/linode
-  allplans=`$LINODEAPI -c avail.linodeplans -d api_responseFormat=json > $HOME/linode/allplans`
-  planid=`jq '.DATA[].PLANID' $HOME/linode/allplans | sed 's/^/Planid: /'> $HOME/linode/planid`
-  cores=`jq '.DATA[].CORES' $HOME/linode/allplans | sed 's/^/ Cores: /' > $HOME/linode/cores`
-  ram=`jq '.DATA[].RAM' $HOME/linode/allplans | sed 's/^/ RAM: /' | sed 's/$/ MB/' > $HOME//linode/ram`
-  price=`jq '.DATA[].HOURLY' $HOME/linode/allplans | sed 's/^/ Price: \$/' | sed 's/$/ p\/h/' > $HOME/linode/price`
-  paste $HOME/linode/planid $HOME/linode/cores $HOME/linode/ram $HOME/linode/price
-  #echo $paste
-  rm -rf $HOME/linode/
+if [[ -z $NODE_PLAN ]]; then
+  error "Node plan not provided." "\n" "Please provide node name using --node-plan=X" "\n"
+  $0 --list-plans
   exit 1
 fi
-
 # Check if datacenter id provided by user
-if [ -z $DATACENTER ]; then
-  echo ""
-  echo -e "No$red Datacenter ID$reset Provided!"
-  echo -e "Please provide datacenter id by using$green --datacenter$red ID$reset"
-  echo ""
-  allcenters=`$LINODEAPI -c avail.datacenters | grep 'DATACENTERID\|ABBR' | sed 's/^.*://g' | sed 's/"/ /g' | xargs -n2 echo | sed 's/^/Datacenter ID: /'`
-  echo "All available Datacenters: "
-  echo "$allcenters"
-  echo ""
+if [[ -z $DATACENTER ]]; then
+  error "Datacenter ID not provided." "\n" "Please provide it using --datacenter=X" "\n"
+  $0 --list-datacenters
   exit 1
 fi
-
+# Check if cloud config has been provided
 if [[ -z $CLOUD_CONFIG_CONTENT ]]; then
-  echo -e $red"Empty --cloud-config content! You must provide your cloud config. See '$0 --help' for more info."$reset "\n"
+  error "Empty --cloud-config content, it won't work!" "\n" \
+    "You must provide your cloud config." "\n" \
+    "Hint: --cloud-config=\"\$(< path/to/your/cloud-config.yaml)\""
   exit 1
 fi
 
