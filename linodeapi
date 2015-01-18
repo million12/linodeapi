@@ -1,4 +1,13 @@
 #!/bin/bash
+#
+# Linode Bash API https://github.com/rwky/Linode-Bash-API
+# Released under the Simplified BSD License see the LICENSE file at the above url
+# README also found at the above url
+#
+# Slightly modified by MILLION12
+# See https://github.com/million12/linodeapi
+#
+
 set -e
 
 CWD=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
