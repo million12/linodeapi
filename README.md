@@ -54,8 +54,7 @@ Options:
 |`--node_name`|Name for your node | **Required** |
 |`--node_plan`|Plan of your choice. If not provided system will show you all available options. | **Required** |
 |`--datacenter`|Datacenter in which your node should be deployed. If not provided system will show you all available options. | **Required** |
-|`--config_local`|`yaml` config file path from local drive (If not provided, GitHub file need to be provided) | **Semi-Required** |
-|`--config_github`|GitHub `yaml` file link.(If not provided `--config_local` need to be provided.). |**Semi-Required**|
+|`--cloud-config`|***Content*** of the user-data config. You can provide it using this trick:<br />`--cloud-config="$(< path/to/your/cloud-config.yaml)` | **Required** |
 |`--token`|ETCD Token Key for fleet deployment. If not provided program will generate one. |**Optional**|  
 
 Quick lists:  

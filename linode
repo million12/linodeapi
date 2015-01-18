@@ -8,8 +8,7 @@ NODE_NAME=""
 NODE_PLAN=""
 DATACENTER=0
 TOKEN=""
-GHCONFIG=""
-FCONFIG=""
+CLOUD_CONFIG_CONTENT=""
 LIST_PLANS=0
 LIST_DATACENTERS=0
 DATA_SIZE="no-data"
@@ -118,11 +117,8 @@ do
     -t=*|--token=*)
       TOKEN="${i#*=}"
       ;;
-    -g=*|--config-github=*)
-      GHCONFIG="${i#*=}"
-      ;;
-    -f=*|--config-local=*)
-      FCONFIG="${i#*=}"
+    -c=*|--cloud-config=*)
+      CLOUD_CONFIG_CONTENT="${i#*=}"
       ;;
     -z*|--list-plans*)
       LIST_PLANS=1
@@ -143,8 +139,7 @@ do
       -t|--token (-t)           ETCD Token
 
       CoreOS cloud_config:
-      --config-github (-g)      GitHub cloud-config.yaml file link (either this or -f is required)
-      --config-local (-f)       Local cloud-config.yaml file (either this or -g is required)
+      --cloud-config (-c)       cloud-config yaml content. Provide using --cloud-config=\"\$(< path/to/your/cloud-config.yaml)\"
 
       ${yellow}Get Details From Linode API: $reset
       --list-plans (-z)         List linode plans
@@ -224,13 +219,9 @@ if [ -z $DATACENTER ]; then
   echo ""
   exit 1
 fi
-if [ -z  $FCONFIG} ] && [ -z $GHCONFIG} ]; then
-  echo ""
-  echo $red"No GitHub or Local cloud-config.yaml file provided!!!"$reset
-  echo ""
-  echo "Please provide file with either:"
-  echo $green "--config-local$reset or$green --config-github"$reset
-  echo ""
+
+if [[ -z $CLOUD_CONFIG_CONTENT ]]; then
+  echo -e $red"Empty --cloud-config content! You must provide your cloud config. See '$0 --help' for more info."$reset "\n"
   exit 1
 fi
 
@@ -324,17 +315,9 @@ done
 set -e # TODO: wrap it in function and set/unset it there
 log "Systm booted. Jumping to next stage"
 
-# Send local cloud-config file to server if provided by user
-if [ -e $FCONFIG ]; then
-  sshpass -p $PASSWD scp $FCONFIG root@$publicip:/root/cloud-config.yaml
-  echo "File Provided and uploaded to for deployment with CoreOS"
-fi
+# Send cloud-config file to server
+echo "$CLOUD_CONFIG_CONTENT" | sshpass -p $PASSWD ssh -o StrictHostKeyChecking=no -l root $publicip "cat > /root/cloud-config.yaml; log 'Provided cloud config:' && echo; cat /root/cloud-config.yaml; echo"
 
-# Download GitHub cloud-config file if provided by user
-if [ ! -z $GHCONFIG ]; then
-  sshpass -p $PASSWD ssh -o StrictHostKeyChecking=no -l root $publicip "curl -s -H \"Authorization: token $GITHUB_KEY\" $GHCONFIG -o /root/cloud-config.yaml"
-  echo "File downloaded from GitHub and ready for deployment."
-fi
 # Send CoreOS installation program
 sshpass -p $PASSWD ssh -o StrictHostKeyChecking=no -l root $publicip "curl -s https://raw.githubusercontent.com/million12/linodeapi/master/prepare_coreos_boot.sh -o /root/prepare_coreos_boot.sh"
 sshpass -p $PASSWD ssh -o StrictHostKeyChecking=no -l root $publicip "chmod +x /root/prepare_coreos_boot.sh"
