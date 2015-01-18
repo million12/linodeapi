@@ -26,6 +26,25 @@ reset=`tput sgr0`
 
 
 
+#######################################
+# Echo/log function
+# Arguments:
+#   String: value to log
+#######################################
+log() {
+  if [[ "$@" ]]; then echo -e "${bold}${green}[LINODE API `date +'%T'`]${reset} $@";
+  else echo; fi
+}
+
+#######################################
+# Log error. Similar to log(), but red.
+# Arguments:
+#   String: value to print out as error
+#######################################
+error() {
+  echo -e "${bold}${red}[LINODE API `date +'%T'`]${reset} ${red}$@${reset}";
+}
+
 #########################################################
 # Verify that command is installed
 # Arguments:
@@ -33,7 +52,7 @@ reset=`tput sgr0`
 #########################################################
 function assert_command_installed() {
   if [ ! $(command -v $1) ]; then
-    echo -e "${red}Command *$1* not installed. Please install it.$reset" "\n"
+    error "Command *$1* not installed. Please install it." "\n"
     exit 1
   fi
 }
@@ -50,13 +69,9 @@ done
 
 # Check if GitHub and Linod API Keys are installed on your system
 if [ "$LINODE_KEY" == "" ]; then
-  echo ""
-  echo $red"Linode API key environmental variable not set$reset"
-  echo "Linode Manual: https://www.linode.com/api"
-  echo ""
-  echo "Add into your .bashrc file "
-  echo "\"export LINODE_KEY=your-Key\""
-  echo ""
+  error "Linode API key environmental variable not set!" "\n" \
+    "Please add into your .bashrc file " "\n" "\"export LINODE_KEY=your-Key\"" "\n" \
+    "See Linode manual for more info: https://www.linode.com/api"
   exit 1
 fi
 
@@ -141,8 +156,8 @@ do
       exit 1
       ;;
     *)
-      echo "Unknown option ${bold}$i${reset}."
-      echo -e "Type ${bold}--help${reset} or ${bold}-h${reset} for all available options." "\n"
+      error "Unknown option ${bold}$i${reset}."
+      log   "Type ${bold}--help${reset} or ${bold}-h${reset} for all available options."
       exit 1;
       ;;
   esac
@@ -165,7 +180,7 @@ fi
 if [ "$LIST_DATACENTERS" == 1 ]; then
   #Get list of datacenters
   allcenters=`linodeapi -c avail.datacenters | grep 'DATACENTERID\|ABBR' | sed 's/^.*://g' | sed 's/"/ /g' | xargs -n2 echo | sed 's/^/Datacenter ID: /'`
-  echo "All available Datacenters: "
+  log "All available Datacenters: "
   echo "$allcenters"
   exit 1
 fi
