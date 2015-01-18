@@ -313,7 +313,5 @@ $LINODEAPI -c linode.boot -d LINODEID=$linodeid\&ConfigID=$coreoscfg
 log
 log "Node ${bold}${white}$NODE_NAME${reset} created and you can now log in."
 log "Public IP: ${bold}${white}$publicip${reset}."
-log "Log in using, for example:" "\n" \
-  "ssh core@$publicip" "\n" \
-  "ssh $USER@$publicip"
+log "Log in using, for example:" "ssh core@$publicip" # Node: don't use here $USER as it's not available inside Docker!
 log
