@@ -1,13 +1,15 @@
 #!/bin/bash
 
+export DEBCONF_FRONTEND=noninteractive
+
 # Prepare Debian for boot with CoreOS
-apt-get update -y      
+apt-get update -y
 apt-get upgrade --show-upgraded -y
 apt-get install -y linux-image-amd64 git mc
 mkdir /boot/grub
 apt-get install -y grub-legacy
 grub-set-default 1
-update-grub 
+update-grub
 
 sed -i 's|<token>|'$4'|' $HOME/cloud-config.yaml
 sed -i 's|$public_ipv4|'$1'|g' $HOME/cloud-config.yaml
@@ -24,4 +26,4 @@ mount /dev/xvdb1 /mnt/core-boot
 mv /mnt/core-boot/boot/grub /boot
 
 sed -i 's/hd0/hd1/g' /boot/grub/menu.lst
-echo "CoreOS Installed"
+echo "CoreOS successfully installed."

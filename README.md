@@ -51,11 +51,13 @@ Options:
 
 | Command | Details | Importance |
 |:--------|---------|:----------:|
+|`--cloud-config`|***Content*** of the user-data config. You must provide it using this trick:<br />`--cloud-config="$(< path/to/your/cloud-config.yaml)` | **Required** |
 |`--node-name`|Name for your node | **Required** |
-|`--node-plan`|Plan of your choice. If not provided system will show you all available options. | **Required** |
-|`--datacenter`|Datacenter in which your node should be deployed. If not provided system will show you all available options. | **Required** |
-|`--cloud-config`|***Content*** of the user-data config. You can provide it using this trick:<br />`--cloud-config="$(< path/to/your/cloud-config.yaml)` | **Required** |
-|`--token`|ETCD Token Key for fleet deployment. If not provided program will generate one. |**Optional**|  
+|`--node-plan`|Plan of your choice. If not provided system will show you all available options. | Optional<br />Default: 1<br />(1CPU, 1GB RAM) |
+|`--datacenter`|Datacenter in which your node should be deployed. If not provided system will show you all available options. | Optional<br />Default: 2<br />(Dallas, TX) |
+|`--token`|ETCD Token Key for fleet deployment. If not provided program will generate one. |Optional|  
+|`--swap-disk-size`|Swap size in MB. Set to 0 to disable. Must be an integer value. That will decrease the CoreOS system partition size by provided amount. |Optional<br />Default: 2048|
+|`--extra-disk-size`|Extra partition (raw) size in MB to create next to default system partition. Must be an integer value. That will decrease the CoreOS system partition size by provided amount. |Optional<br />Default: 0|
 
 Linode lists:  
 
@@ -72,7 +74,7 @@ Deploy node with `cloud-config.yaml` config:
 # Author(s)
 
 Author: Przemyslaw Ozgo (<linux@ozgo.info>)  
-Note: this work is strongly influenced by [rwky/Linode-Bash-API](https://github.com/rwky/Linode-Bash-API).
+Note: this work uses Linode API originally developed by [rwky/Linode-Bash-API](https://github.com/rwky/Linode-Bash-API).
 
 ---
 
