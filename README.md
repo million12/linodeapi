@@ -23,11 +23,15 @@ With this you can run simply `linode --help` or `linode --list_plans`. The Docke
 ## Installation (manual)
 
 You will need to have few programs installed on your machine to be able to use this api. The list contains:  
-`curl`  
-`pwgen`  
-`sshpass`  
-`sudo`  
-`jq`
+* `curl`
+* `pwgen`
+* `sudo`
+* `jq`
+* `sshpass`  
+    Mac Users install:  
+    `brew install https://raw.github.com/eugeneoden/homebrew/eca9de1/Library/Formula/sshpass.rb`
+
+You can install all above using `yum install NAME` (RHEL) or `apt-get install NAME` (Fedora, Debian, Ubuntu) or `brew install NAME` (OSX).
 
 Once you have them all, run `./linode`. It will download required LinodeAPI macros. You can also symlink `linode` to your PATH to make it easily available everywhere.
 
@@ -51,8 +55,8 @@ Options:
 
 | Command | Details | Importance |
 |:--------|---------|:----------:|
-|`--node_name`|Name for your node | **Required** |
-|`--node_plan`|Plan of your choice. If not provided system will show you all available options. | **Required** |
+|`--node-name`|Name for your node | **Required** |
+|`--node-plan`|Plan of your choice. If not provided system will show you all available options. | **Required** |
 |`--datacenter`|Datacenter in which your node should be deployed. If not provided system will show you all available options. | **Required** |
 |`--cloud-config`|***Content*** of the user-data config. You can provide it using this trick:<br />`--cloud-config="$(< path/to/your/cloud-config.yaml)` | **Required** |
 |`--token`|ETCD Token Key for fleet deployment. If not provided program will generate one. |**Optional**|  
@@ -65,13 +69,8 @@ Quick lists:
 |`--list_datacenters`|List all available datacenters|  
 
 ### Examples 
-Deploy node with your localfile `yaml` config and token for hooking up with already deployed fleet.   
-
-`linode --node_name elasticsearch --node_plan 2 --datacenter 7 --token f0f727cdc75b55aa12de9085d7f444a1 --config_local ~/my_config.yaml`  
-
-Deploy node with GitHub `yaml` config file and no ETCD token. (no fleet will be used in this exapmple)  
-
-`linode --node_name logstash --node_plan 1 --datacenter 7 --config_github https://raw.githubusercontent.com/million12/linodeapi/master/cloud-config.yaml`  
+Deploy node with `cloud-config.yaml` config:  
+`./linode --node-name=test1 --node-plan=2 --datacenter=3 --cloud-config="$(< path/to/cloud-config.yaml)"`
 
 
 # Author(s)
