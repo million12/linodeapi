@@ -124,10 +124,10 @@ do
     -f=*|--config-local=*)
       FCONFIG="${i#*=}"
       ;;
-    -z=*|--list-plans=*)
+    -z*|--list-plans*)
       LIST_PLANS=1
       ;;
-    -x=*|--list-datacenters=*)
+    -x*|--list-datacenters*)
       LIST_DATACENTERS=1
       ;;
     -h|--help)
@@ -233,6 +233,13 @@ if [ -z  $FCONFIG} ] && [ -z $GHCONFIG} ]; then
   echo ""
   exit 1
 fi
+
+
+log "Creating node ${bold}${white}$NODE_NAME${reset}" \
+ "in data center ${bold}${white}$DATACENTER${reset}," \
+ "plan ${bold}${white}$NODE_PLAN${reset}."
+
+
 # Set Random Password for BootOS Partition.
 PASSWD=$(pwgen -c -n -1 16)
 
@@ -242,9 +249,9 @@ workdir="$HOME/linode/$NODE_NAME"
 echo "$PASSWD" > $workdir/password
 # Check if token provided by user. if not generate new one.
 if [ -z $TOKEN ]; then
-  echo; echo $red"No ETCD token provided. System will generate a new one.$reset";
+  log "No ETCD token provided. Generating new one..."
   TOKEN=$(curl -s https://discovery.etcd.io/new | sed "s#https://discovery.etcd.io/##")
-  echo "New token$green ($TOKEN)$reset generated"; echo
+  log "Generated token: ${bold}${white}$TOKEN${reset}."
 fi
 
 # Create node with provided name
@@ -307,13 +314,15 @@ coreoscfg=`cat $workdir/coreos-config-id.txt`
 ## Boot Installation
 linodeapi -c linode.boot -d LINODEID=$linodeid\&ConfigID=$instcfg
 #Waiting for system to boot
-bootstatus="wait"
+bootstatus=""
 while [[ $bootstatus != "ok" ]]; do
-  echo "Waiting for system to boot."
-  #sleep 5
+  set +e
+  log "Waiting for system to boot..."
+  sleep 5
   bootstatus=`sshpass -p $PASSWD ssh -o ConnectionAttempts=100 -o ConnectTimeout=5 -o StrictHostKeyChecking=no -l root $publicip echo ok 2>&1`
 done
-echo "Systm booted. Jumping to next stage"
+set -e # TODO: wrap it in function and set/unset it there
+log "Systm booted. Jumping to next stage"
 
 # Send local cloud-config file to server if provided by user
 if [ -e $FCONFIG ]; then
@@ -336,8 +345,15 @@ sshpass -p $PASSWD ssh -o StrictHostKeyChecking=no -l root $publicip "/root/prep
 linodeapi -c linode.shutdown -d LinodeID=$linodeid
 # Boot into CoreOS
 linodeapi -c linode.boot -d LINODEID=$linodeid\&ConfigID=$coreoscfg
-# Print some informations
-echo "Node $NODE_NAME created and you can now login."
-echo ""
-echo "ssh core@$publicip"
-echo "ssh $USER@$publicip"
+
+#
+# Print summary info
+#
+log
+log "Node ${bold}${white}$NODE_NAME${reset} created and you can now log in."
+log "Public IP: ${bold}${white}$publicip${reset}."
+log
+log "Log in using for example:" "\n" \
+  "ssh core@$publicip" "\n" \
+  "ssh $USER@$publicip"
+log
