@@ -1,364 +1,365 @@
 #!/bin/bash
 
-# Program REPO (devel/master)
-repo="master"
-
 set -e
-#set -u
-
-HELP=0
-NODE_NAME=""
-NODE_PLAN=""
-DATACENTER_ID=""
-TOKEN=""
-GHCONFIG=""
-FCONFIG=""
-LIST_PLANS=0
-LIST_DATACENTERS=0
+set -u
 
 # Bash Colors
 red=`tput setaf 1`
 green=`tput setaf 2`
-blue=`tput setaf 4`
 yellow=`tput setaf 3`
 white=`tput setaf 7`
 bold=`tput bold`
 reset=`tput sgr0`
+separator=$(echo && printf '=%.0s' {1..100} && echo)
 
-# Check if Required programs are installed
-if ! [ -x "$(command -v curl)" ]; then
-  echo ""
-  echo $red"'curl' not installed!!$reset   Please install curl. ($green yum install curl$reset or$green apt-get install curl$reset)"
-  echo ""
-  exit 1
-fi
-if ! [ -x "$(command -v pwgen)" ]; then
-  echo ""
-  echo $red"'pwgen' not installed!!$reset   Please install pwgen. ($green yum install pwgen$reset or$green apt-get install pwgen$reset)"
-  echo "Mac Users install ising brew$green brew install pwgen$reset"
-  echo ""
-  exit 1
-fi
-if ! [ -x "$(command -v sshpass)" ]; then
-  echo ""
-  echo $red"'sshpass' not installed!!$reset   Please install sshpass. ($green yum install sshpass$reset or$green apt-get install sshpass$reset)"
-  echo "Mac Users install ising brew$green brew install https://raw.github.com/eugeneoden/homebrew/eca9de1/Library/Formula/sshpass.rb$reset"
-  echo ""
-  exit 1
-fi
-if ! [ -x "$(command -v sudo)" ]; then
-  echo ""
-  echo $red"'sudo' not installed!!$reset   Please install sudo. ($green yum install sudo$reset or$green apt-get install sudo$reset)"
-  echo ""
-  exit 1
-fi
-if ! [ -x "$(command -v jq)" ]; then
-  echo ""
-  echo $red"'jq' not installed!!$reset   Please install jq. ($green yum install jq$reset or$green apt-get install jq$reset)"
-  echo "Mac Users install using brew$green brew install jq$reset"
-  echo ""
-  exit 1
-fi
+#######################################
+# Echo/log function
+# Arguments:
+#   String: value to log
+#######################################
+log() {
+  if [[ "$@" ]]; then echo -e "${bold}${green}[LINODE API `date +'%T'`]${reset} $@";
+  else echo; fi
+}
+
+#######################################
+# Outputs warning. Similar to log(), but yellow.
+# Arguments:
+#   String: value to print out as warning
+#######################################
+warning() {
+  echo -e "${bold}${yellow}[LINODE API `date +'%T'`]${reset} ${yellow}$@${reset}";
+}
+
+#######################################
+# Log error. Similar to log(), but red.
+# Arguments:
+#   String: value to print out as error
+#######################################
+error() {
+  echo -e "${bold}${red}[LINODE API `date +'%T'`]${reset} ${red}$@${reset}";
+}
+
+#########################################################
+# Verify that command is installed
+# Arguments:
+#   String: command name
+#########################################################
+function assert_command_installed() {
+  if [ ! $(command -v $1) ]; then
+    error "Command *$1* not installed. Please install it." "\n"
+    exit 1
+  fi
+}
+
+#########################################################
+# Resolve this script (./linode) real path, even
+# if it is a symlink. We need it to correctly point
+# the ./$LINODEAPI file, which is expected to be
+# next to this file.
+#
+# Source: http://stackoverflow.com/questions/59895/can-a-bash-script-tell-what-directory-its-stored-in
+#########################################################
+function resolve_current_script_dir() {
+  local source="${BASH_SOURCE[0]}"
+  local dir=""
+  while [ -h "$source" ]; do
+    dir="$( cd -P "$( dirname "$source" )" && pwd )"
+    source="$(readlink "$source")"
+    [[ $source != /* ]] && source="$dir/$source"
+  done
+  echo "$( cd -P "$( dirname "$source" )" && pwd )"
+}
+
+#########################################################
+# Lists plans available on Linode
+#########################################################
+function list_plans() {
+  local allplans=$($LINODEAPI -c avail.linodeplans -d api_responseFormat=json)
+  local planid=$(echo $allplans | jq '.DATA[].PLANID' | sed 's/^/Planid: /')
+  local cores=$(echo $allplans | jq '.DATA[].CORES' | sed 's/^/ Cores: /')
+  local ram=$(echo $allplans | jq '.DATA[].RAM' | sed 's/^/ RAM: /' | sed 's/$/ MB/')
+  local price=$(echo $allplans | jq '.DATA[].HOURLY' | sed 's/^/ Price: \$/' | sed 's/$/ p\/h/')
+  paste <(echo "$planid") <(echo "$cores") <(echo "$ram") <(echo "$price")
+}
+
+#########################################################
+# Lists data centers available on Linode
+#########################################################
+function list_datacenters() {
+  echo "$($LINODEAPI -c avail.datacenters | grep 'DATACENTERID\|ABBR' | sed 's/^.*://g' | sed 's/"/ /g' | xargs -n2 echo | sed 's/^/Datacenter ID: /')"
+}
+
+#########################################################
+# Generate ETCD token (if empty)
+# Globals:
+#   $TOKEN: supplied token
+#########################################################
+function generate_etcd_token_if_needed() {
+  if [[ -z $TOKEN ]]; then
+    log "No ETCD token provided. Generating new one..."
+    TOKEN=$(curl -s https://discovery.etcd.io/new | sed "s#https://discovery.etcd.io/##")
+    log "Generated token: ${bold}${white}$TOKEN${reset}."
+  fi
+}
+
+#########################################################
+# Check in the loop (every 5s) if the server is already up.
+# The check is done by logging into the system.
+# Arguments:
+#   String: IP address to try to log in
+#   String: password for root user on a target host
+#########################################################
+function wait_for_boot() {
+  set +e
+  local ip=$1
+  local passwd=$2
+  local code=1
+  while [[ $code -ne 0 ]]; do
+    log "Waiting for server to boot..."
+    sshpass -p $passwd ssh -o ConnectTimeout=3 -o StrictHostKeyChecking=no -l root $ip echo > /dev/null 2>&1
+    code=$?
+    if [[ $code -ne 0 ]]; then sleep 10; fi
+  done
+  set -e
+}
+
+# Internal variables
+SCRIPT_DIR=$(resolve_current_script_dir) # script dir (if symlink, it will be resolved to the target)
+LINODEAPI="$SCRIPT_DIR/linodeapi"
+
+# ENV variables provided by user
+LINODE_KEY=${LINODE_KEY:=""}
+
+# Internal variables
+NODE_NAME=""
+NODE_PLAN="1" # default: smallest node plan
+DATACENTER="2" # default: 1st available DC
+TOKEN=""
+CLOUD_CONFIG_CONTENT=""
+BOOT_DISK_SIZE=2048 # int, in MB - cannot be modified by user
+SWAP_DISK_SIZE=2048 # int, in MB
+EXTRA_DISK_SIZE=0 # int, in MB
+
+
+
+# Make sure we have all required command installed
+for required_cmd in curl pwgen sshpass sudo jq; do
+  assert_command_installed $required_cmd
+done
 
 # Check if GitHub and Linod API Keys are installed on your system
-if [ "$LINODE_KEY" == "" ]; then
-  echo ""
-  echo $red"Linode API key environmental variable not set$reset"
-  echo "Linode Manual: https://www.linode.com/api"
-  echo ""
-  echo "Add into your .bashrc file "
-  echo "\"export LINODE_KEY=your-Key\""
-  echo ""
+if [[ -z $LINODE_KEY ]]; then
+  error "Linode API key environmental variable not set!" "\n" \
+    "Please add into your .bashrc file " "\n" "\"export LINODE_KEY=your-Key\"" "\n" \
+    "See Linode manual for more info: https://www.linode.com/api"
   exit 1
 fi
 
-if [ "$GITHUB_KEY" == "" ]; then
-  echo ""
-  echo $red"GitHub API key environmental variable not set$reset"
-  echo "GitHub Manual: https://help.github.com/articles/creating-an-access-token-for-command-line-use/"
-  echo ""
-  echo "Add into your .bashrc file "
-  echo "\"export GITHUB_KEY=your-Key\""
-  echo ""
-  exit 1
-fi
-
-# Check if API is installed on your machine
-if [ ! -f /usr/local/bin/linodeapi ]; then
-  echo ""
-  echo "Linode API not present in your system"
-  echo "Attempting to install Linode API main program"
-  curl -s "https://raw.githubusercontent.com/million12/linodeapi/$repo/linodeapi" -o /usr/local/bin/linodeapi
-  sudo curl -s "https://raw.githubusercontent.com/million12/linodeapi/$repo/linode_api_macro" -o /etc/linode_api_macro
-  chmod +x /usr/local/bin/linodeapi
-  echo "Linode API Installed Successfully"
-  echo ----------------------------
-fi
-
-# Options
-# translate long options to short
-for arg
+# Options, long and short
+for i in "$@"
 do
-    delim=""
-    case "$arg" in
-       --node_name) args="${args}-n ";;
-       --node_plan) args="${args}-p ";;
-       --datacenter) args="${args}-d ";;
-       --token) args="${args}-t ";;
-       --config_github) args="${args}-g ";;
-       --config_local) args="${args}-f ";;
-       --list_plans) args="${args}-z ";;
-       --list_datacenters) args="${args}-x ";;
-       --help) args="${args}-h ";;
+  case $i in
+    -n=*|--node-name=*)
+      NODE_NAME="${i#*=}"
+      ;;
+    -p=*|--node-plan=*)
+      NODE_PLAN="${i#*=}"
+      ;;
+    -d=*|--datacenter=*)
+      DATACENTER="${i#*=}"
+      ;;
+    -t=*|--token=*)
+      TOKEN="${i#*=}"
+      ;;
+    -c=*|--cloud-config=*)
+      CLOUD_CONFIG_CONTENT="${i#*=}"
+      ;;
+    -ds=*|--extra-disk-size=*)
+      EXTRA_DISK_SIZE="${i#*=}"
+      EXTRA_DISK_SIZE=$((EXTRA_DISK_SIZE+0)) # make sure it's integer!
+      ;;
+    -ss=*|--swap-disk-size=*)
+      SWAP_DISK_SIZE="${i#*=}"
+      SWAP_DISK_SIZE=$((SWAP_DISK_SIZE+0)) # make sure it's integer!
+      ;;
+    -z*|--list-plans*)
+      log "Available Linode plans:"
+      list_plans
+      exit 0
+      ;;
+    -x*|--list-datacenters*)
+      log "Available Linode data centers:"
+      list_datacenters
+      exit 0
+      ;;
+    -h|--help)
+      echo -e "
+      Linode Bash API CoreOS Deployment Help
+      opnions:
 
-       # pass through anything else
-       *) [[ "${arg:0:1}" == "-" ]] || delim="\""
-           args="${args}${delim}${arg}${delim} ";;
-    esac
-done
-# reset the translated args
-eval set -- $args
+      -h|--help (-h)            help
+      -n|--node-name (-n)       Node name (required)
+      -s|--data-size (-s)       Size of data partition (optional)
+      -p|--node-plan (-p)       Node plan (required)
+      -d|--datacenter (-d)      Datacenter of your choice (required)
+      -t|--token (-t)           ETCD Token
 
+      CoreOS cloud_config:
+      --cloud-config (-c)       cloud-config yaml content. Provide using --cloud-config=\"\$(< path/to/your/cloud-config.yaml)\"
 
+      Disk config:
+      -ss|--swap-disk-size      Swap disk size in MB (integer, default: 2048)
+                                That will decrease the CoreOS system partition size by provided amount.
+      -ds|--extra-disk-size     Extra partition (raw) size in MB (integer, default: 0)
+                                That will decrease the CoreOS system partition size by provided amount.
 
-while getopts "n:p:d:t:g:f:z x h" opt; do
-  case $opt in
-    n)
-    #New node name
-    NODE_NAME=$OPTARG
-    ;;
-    p)
-    #Node Size
-    NODE_PLAN=$OPTARG
-    ;;
-    d)
-    #Lista all linode datacenters available
-    DATACENTER=$OPTARG
-    ;;
-    t)
-    #ETCD Token
-    TOKEN=$OPTARG
-    ;;
-    g)
-    #GitHub Cloud Config File
-    GHCONFIG=$OPTARG
-    ;;
-    f)
-    #Local Cloud Config File
-    FCONFIG=$OPTARG
-    ;;
-    z)
-    #Lista all linode plans available
-    LIST_PLANS=1
-    ;;
-    x)
-    #Lista all linode datacenters available
-    LIST_DATACENTERS=1
-    ;;
-    h)
-    #Help
-    HELP=1
-    ;;
-    \?)
-    #unknown option
-    echo ""
-    echo "Type$red --help$reset or$red -h$reset for all available options."
-    echo ""
-    exit 1
-    ;;
+      ${yellow}Get Details From Linode API: $reset
+      --list-plans (-z)         List linode plans
+      --list-datacenters (-x)   List linode datacenters
+
+      For more informations on Linode/Github API keys please go to project page:
+      ${white}https://github.com/million12/linodeapi$reset" "\n"
+
+      exit 1
+      ;;
+    *)
+      error "Unknown option ${bold}$i${reset}."
+      log   "Type ${bold}--help${reset} or ${bold}-h${reset} for all available options."
+      exit 1;
+      ;;
   esac
 done
 
-# Runtime checks
-if [ $HELP -eq 1 ]; then
-  cat <<EOT
-  Linode Bash API CoreOS Deployment Help
-  opnions:
 
-  -h|--help (-h)            help
-  -n|--node_name (-n)       Node name (required)
-  -p|--node_plan (-p)       Node plan (required)
-  -d|--datacenter_id (-d)   Datacenter of your choice (required)
-  -t|--token (-t)           ETCD Token
-
-  CoreOS cloud_config:
-  --config_github (-g)      GitHub cloud-config.yaml file link (either this or -f is required)
-  --config_file (-f)        Local cloud-config.yaml file (either this or -g is required)
-
-$yellow Get Details From Linode API: $reset
-  --list_plans (-z)         List linode plans
-  --list_datacenters (-x)   List linode datacenters
-
-  For more informations on Linode/Github API keys please go to project page:$blue
-  https://github.com/million12/linodeapi$reset
-
-EOT
-exit 1
-fi
-if [ $LIST_PLANS -eq 1 ]; then
-  # Get list of Plans
-  mkdir -p $HOME/linode
-  allplans=`linodeapi -c avail.linodeplans -d api_responseFormat=json > $HOME/linode/allplans`
-  planid=`jq '.DATA[].PLANID' $HOME/linode/allplans | sed 's/^/Planid: /'> $HOME/linode/planid`
-  cores=`jq '.DATA[].CORES' $HOME/linode/allplans | sed 's/^/ Cores: /' > $HOME/linode/cores`
-  ram=`jq '.DATA[].RAM' $HOME/linode/allplans | sed 's/^/ RAM: /' | sed 's/$/ MB/' > $HOME//linode/ram`
-  price=`jq '.DATA[].HOURLY' $HOME/linode/allplans | sed 's/^/ Price: \$/' | sed 's/$/ p\/h/' > $HOME/linode/price`
-  paste  $HOME/linode/planid $HOME/linode/cores $HOME/linode/ram $HOME/linode/price
-  echo $paste
-  rm -rf $HOME/linode/
-  exit 1
-fi
-if [ $LIST_DATACENTERS -eq 1 ]; then
-  #Get list of datacenters
-  allcenters=`linodeapi -c avail.datacenters | grep 'DATACENTERID\|ABBR' | sed 's/^.*://g' | sed 's/"/ /g' | xargs -n2 echo | sed 's/^/Datacenter ID: /'`
-  echo "All available Datacenters: "
-  echo "$allcenters"
-  exit 1
-fi
 # Check if node name provided by user
-if [ -z $NODE_NAME ]; then
-  echo ""
-  echo -e "No Node$red Name$reset Provided!"
-  echo -e "Please provide node name by using$green --node_name$red node_name$reset"
-  echo ""
+if [[ -z $NODE_NAME ]]; then
+  error "Node name not provided." "\n" "Please provide node name using --node-name=YOUR_NODE_NAME" "\n"
   exit 1
 fi
 # Check if node plan provided by user
-if [ -z $NODE_PLAN ]; then
-  echo -e "Node name: $NODE_NAME$green OK$reset\t"
-  echo ""
-  echo -e "No Node$red Plan$reset Provided!"
-  echo -e "Please provide node plan by using$green --node_plan$red ID$reset"
-  echo ""
-  # Get list of Plans
-  mkdir -p $HOME/linode
-  allplans=`linodeapi -c avail.linodeplans -d api_responseFormat=json > $HOME/linode/allplans`
-  planid=`jq '.DATA[].PLANID' $HOME/linode/allplans | sed 's/^/Planid: /'> $HOME/linode/planid`
-  cores=`jq '.DATA[].CORES' $HOME/linode/allplans | sed 's/^/ Cores: /' > $HOME/linode/cores`
-  ram=`jq '.DATA[].RAM' $HOME/linode/allplans | sed 's/^/ RAM: /' | sed 's/$/ MB/' > $HOME//linode/ram`
-  price=`jq '.DATA[].HOURLY' $HOME/linode/allplans | sed 's/^/ Price: \$/' | sed 's/$/ p\/h/' > $HOME/linode/price`
-  paste  $HOME/linode/planid $HOME/linode/cores $HOME/linode/ram $HOME/linode/price
-  echo $paste
-  rm -rf $HOME/linode/
+if [[ -z $NODE_PLAN ]]; then
+  error "Node plan not provided." "\n" "Please provide node name using --node-plan=X" "\n"
+  $0 --list-plans
   exit 1
 fi
 # Check if datacenter id provided by user
-if [ -z $DATACENTER ]; then
-  echo ""
-  echo -e "No$red Datacenter ID$reset Provided!"
-  echo -e "Please provide datacenter id by using$green --datacenter$red ID$reset"
-  echo ""
-  allcenters=`linodeapi -c avail.datacenters | grep 'DATACENTERID\|ABBR' | sed 's/^.*://g' | sed 's/"/ /g' | xargs -n2 echo | sed 's/^/Datacenter ID: /'`
-  echo "All available Datacenters: "
-  echo "$allcenters"
-  echo ""
+if [[ -z $DATACENTER ]]; then
+  error "Datacenter ID not provided." "\n" "Please provide it using --datacenter=X" "\n"
+  $0 --list-datacenters
   exit 1
 fi
-# Check if at least one cloud-config file is provided by user
-if [ -z  $FCONFIG ] && [ -z $GHCONFIG ]; then
-  echo ""
-  echo $red"No GitHub or Local cloud-config.yaml file provided!!!"$reset
-  echo ""
-  echo "Please provide file with either:"
-  echo $green "--config_local$reset or$green --config_github"$reset
-  echo ""
+# Check if cloud config has been provided
+if [[ -z $CLOUD_CONFIG_CONTENT ]]; then
+  error "Empty --cloud-config content, it won't work!" "\n" \
+    "You must provide your cloud config." "\n" \
+    "Hint: --cloud-config=\"\$(< path/to/your/cloud-config.yaml)\""
   exit 1
 fi
-# Set Random Password for BootOS Partition.
-PASSWD=$(pwgen -c -n -1 16)
 
-# Create WorkDir for the process
-mkdir -p $HOME/linode/$NODE_NAME
-workdir="$HOME/linode/$NODE_NAME"
-echo "$PASSWD" > $workdir/password
-# Check if token provided by user. if not generate new one.
-if [ -z $TOKEN ]; then
-  echo; echo $red"No ETCD token provided. System will generate a new one.$reset";
-  TOKEN=$(curl -s https://discovery.etcd.io/new | sed "s#https://discovery.etcd.io/##")
-  echo "New token$green ($TOKEN)$reset generated"; echo
-fi
+
+log "Creating node *${bold}${white}$NODE_NAME${reset}*" \
+ "with plan *${bold}${white}$NODE_PLAN${reset}*," \
+ "in data center *${bold}${white}$DATACENTER${reset}*."
+
+generate_etcd_token_if_needed
+
+PASSWD=$(pwgen -c -n -1 16)
+log "Generated root password for the node: ${bold}${white}$PASSWD${reset}"
 
 # Create node with provided name
-linodeapi -c linode.create -d DATACENTERID=$DATACENTER\&PLANID=$NODE_PLAN | grep LinodeID | sed 's/^.*://' > $workdir/nodeid.txt
+linodeid=$($LINODEAPI -c linode.create -d DATACENTERID=$DATACENTER\&PLANID=$NODE_PLAN | grep LinodeID | sed 's/^.*://')
+if [[ ! $linodeid ]]; then
+  error "Exiting, error while creating node..."
+  exit 1
+else
+  log "Node with ID ${bold}${white}$linodeid${reset} initialised."
+fi
 
-# Get Linode ID
-linodeid=`cat $workdir/nodeid.txt`
+# Rename node to the name provided by user. If not successfull, assume 'linode$linodeid' name
+set +e; $LINODEAPI -c linode.update -d LINODEID=$linodeid\&LABEL=$NODE_NAME 1>/dev/null
+res_code=$?; set -e
+if [[ $res_code -ne 0 ]]; then
+  NODE_NAME="linode${linodeid}"
+  warning "Could not set the node name. The node name will be ${bold}$NODE_NAME${reset}."
+fi
 
-# Rename ndoe to user specific
-linodeapi -c linode.update -d LINODEID=$linodeid\&LABEL=$NODE_NAME
-
-# Get linode Public IP
-linodeapi -c linode.ip.list -d LinodeID=$linodeid | grep IPADDRESS | grep -v IPADDRESSID | sed 's/^.*:"//' | sed 's/"//' > $workdir/publicip.txt
-publicip=`cat $workdir/publicip.txt`
-
-#Get Linode Gateway
-linodeapi -c linode.ip.list -d LinodeID=$linodeid | grep IPADDRESS | grep -v IPADDRESSID | sed 's|^.*:"||' | sed 's/"//' | sed 's/\./ /g' | awk -v OFS=. '{print $1, $2, $3}' > $workdir/gateway.txt
-gateway=`cat $workdir/gateway.txt`
-
-# Add Private network interface
-linodeapi -c linode.ip.addprivate -d LINODEID=$linodeid | grep IPADDRESS | grep -v IPADDRESSID | sed 's/^.*:"//' | sed 's/"//' > $workdir/privateip.txt
-privateip=`cat $workdir/privateip.txt`
+log "Configuring node networking..."
+# Get linode Public/Private IP and gateway (note: the private ip has to be added first!)
+$LINODEAPI -c linode.ip.addprivate -d LINODEID=$linodeid 1>/dev/null
+# Contains pure list of IP addresses, one per-line. The 1st one is public.
+iplist=$($LINODEAPI -c linode.ip.list -d LinodeID=$linodeid | grep -E 'IPADDRESS\W' | sed -E 's/[^\.0-9]//g')
+publicip=$(echo "$iplist" | sed -n 1p) # get the 1st IP addr
+privateip=$(echo "$iplist" | sed -n 2p) # get the 2nd IP addr
+gateway_net=$(echo $privateip | awk -F. '{print $1 "." $2 "." $3}') # private IP, but with no last segment
+log "Public IP: ${bold}${white}$publicip${reset}, private IP: ${bold}${white}$privateip${reset}, gateway: ${bold}${white}$gateway_net.1${reset}."
 
 # Get linode disk space
-diskspace=`linodeapi -c linode.list -d LinodeID=$linodeid | grep TOTALHD | sed 's/^.*://'`
-bootspace=2048
-swapspace=1024
-coreosspace=$(($diskspace - $bootspace - $swapspace))
+diskspace=$($LINODEAPI -c linode.list -d LinodeID=$linodeid | grep TOTALHD | sed 's/^.*://')
+coreosspace=$(($diskspace - $BOOT_DISK_SIZE - $SWAP_DISK_SIZE - $EXTRA_DISK_SIZE))
+log "Configuring disks..."
+log "CoreOS disk size: ${coreosspace} MB, swap: ${SWAP_DISK_SIZE} MB, extra disk size: ${EXTRA_DISK_SIZE} MB."
+log "Node total disk space: ${diskspace} MB."
 
 # Create BootOS (Debian)
-linodeapi -c linode.disk.createfromdistribution -d LinodeID=$linodeid\&DistributionID=130\&Label=BootHD\&Size=$bootspace\&rootPass=$PASSWD
+$LINODEAPI -c linode.disk.createfromdistribution -d LinodeID=$linodeid\&DistributionID=130\&Label=BootHD\&Size=$BOOT_DISK_SIZE\&rootPass=$PASSWD 1>/dev/null
 
 # Create CoreOS Partition
-linodeapi -c linode.disk.create -d LinodeID=$linodeid\&Label=CoreOS\&Type=raw\&Size=$coreosspace
+$LINODEAPI -c linode.disk.create -d LinodeID=$linodeid\&Label=CoreOS\&Type=raw\&Size=$coreosspace 1>/dev/null
 
-# Create Swap Partition
-linodeapi -c linode.disk.create -d LinodeID=$linodeid\&Label=SWAP\&Type=swap\&Size=$swapspace
+# Create swap if requested by user
+if [[ $SWAP_DISK_SIZE -ne 0 ]]; then
+  log "Creating swap, size ${SWAP_DISK_SIZE} MB."
+  $LINODEAPI -c linode.disk.create -d LinodeID=$linodeid\&Label=SWAP\&Type=swap\&Size=$SWAP_DISK_SIZE 1>/dev/null
+fi
+# Create Data Partition if provided space size by user
+if [[ $EXTRA_DISK_SIZE -ne 0 ]]; then
+  log "Creating extra disk, size ${EXTRA_DISK_SIZE} MB."
+  $LINODEAPI -c linode.disk.create -d LinodeID=$linodeid\&Label=Data\&Type=raw\&Size=$EXTRA_DISK_SIZE 1>/dev/null
+fi
 
 # Get All Disks ID's
-diskids=`linodeapi -c linode.disk.list -d LINODEID=$linodeid | grep DISKID | sed 's/^.*://' | xargs -n 3 echo | sed 's/ /,/g'`
+diskids=$($LINODEAPI -c linode.disk.list -d LINODEID=$linodeid | grep DISKID | sed 's/^.*://' | xargs -n 3 echo | sed 's/ /,/g')
 
 # Create Install Profile for Installation of CoreOS
-linodeapi -c linode.config.create -d LINODEID=$linodeid\&Label=Install\&KERNELID=138\&DiskList=$diskids\&RootDeviceNum=1 | grep ConfigID | sed 's/^.*://' > $workdir/install-config-id.txt
-instcfg=`cat $workdir/install-config-id.txt`
+instcfg=$($LINODEAPI -c linode.config.create -d LINODEID=$linodeid\&Label=Install\&KERNELID=138\&DiskList=$diskids\&RootDeviceNum=1 | grep ConfigID | sed 's/^.*://')
 
 # Create CoreOS Profile for booting operational version.
-linodeapi -c linode.config.create -d LINODEID=$linodeid\&Label=CoreOS\&KERNELID=95\&DiskList=$diskids\&RootDeviceNum=1 | grep ConfigID | sed 's/^.*://' > $workdir/coreos-config-id.txt
-coreoscfg=`cat $workdir/coreos-config-id.txt`
+coreoscfg=$($LINODEAPI -c linode.config.create -d LINODEID=$linodeid\&Label=CoreOS\&KERNELID=95\&DiskList=$diskids\&RootDeviceNum=1 | grep ConfigID | sed 's/^.*://')
 
 ## Boot Installation
-linodeapi -c linode.boot -d LINODEID=$linodeid\&ConfigID=$instcfg
-#Waiting for system to boot
-bootstatus=""
-while [[ $bootstatus != "ok" ]]; do
-  echo "Waiting for system to boot."
-  #sleep 5
-  bootstatus=`sshpass -p $PASSWD ssh -o ConnectionAttempts=22 -o ConnectTimeout=5 -o StrictHostKeyChecking=no -l root $publicip echo ok 2>&1`
-done
-echo "Systm booted. Jumping to next stage"
+log "Disks created, re-booting."
+$LINODEAPI -c linode.boot -d LINODEID=$linodeid\&ConfigID=$instcfg 1>/dev/null
 
-# Send local cloud-config file to server if provided by user
-if [ -e $FCONFIG ]; then
-  sshpass -p $PASSWD scp $FCONFIG root@$publicip:/root/cloud-config.yaml
-  echo "File Provided and uploaded to for deployment with CoreOS"
-fi
+# Waiting for system to boot
+#sleep 5 # add this sleep in case linodeapi has some lag and system is still up, but shutting down...
+wait_for_boot $publicip $PASSWD
+log "System booted. Jumping to next stage..."
 
-# Download GitHub cloud-config file if provided by user
-if [ ! -z $GHCONFIG ]; then
-  sshpass -p $PASSWD ssh -o StrictHostKeyChecking=no -l root $publicip "curl -s -H \"Authorization: token $GITHUB_KEY\" $GHCONFIG -o /root/cloud-config.yaml"
-  echo "File downloaded from GitHub and ready for deployment."
-fi
-# Send CoreOS installation program
-sshpass -p $PASSWD ssh -o StrictHostKeyChecking=no -l root $publicip "curl -s https://raw.githubusercontent.com/million12/linodeapi/$repo/prepare_coreos_boot.sh -o /root/prepare_coreos_boot.sh"
-sshpass -p $PASSWD ssh -o StrictHostKeyChecking=no -l root $publicip "chmod +x /root/prepare_coreos_boot.sh"
+# Send cloud-config file to server
+echo "$CLOUD_CONFIG_CONTENT" | sshpass -p $PASSWD ssh -o StrictHostKeyChecking=no -l root $publicip "cat > /root/cloud-config.yaml"
+log "Cloud config successfully copied to the target system. Provided cloud config content:" "\n" $separator "\n" "$CLOUD_CONFIG_CONTENT" "\n" $separator
 
-# Run CoreOS Installation and configuration
-sshpass -p $PASSWD ssh -o StrictHostKeyChecking=no -l root $publicip "/root/prepare_coreos_boot.sh $publicip $privateip $gateway $TOKEN"
-# Shutdown Boot Install
-linodeapi -c linode.shutdown -d LinodeID=$linodeid
-# Boot into CoreOS
-linodeapi -c linode.boot -d LINODEID=$linodeid\&ConfigID=$coreoscfg
-# Print some informations
-echo "Node $NODE_NAME created and you can now login."
-echo ""
-echo "ssh core@$publicip"
-echo "ssh username@$publicip"
+log "Installing CoreOS..."
+# Send CoreOS installation script, proceeding with CoreOS installation...
+sshpass -p $PASSWD ssh -o StrictHostKeyChecking=no -l root $publicip "
+  curl -s https://raw.githubusercontent.com/million12/linodeapi/master/prepare_coreos_boot.sh -o /root/prepare_coreos_boot.sh && \
+  chmod +x /root/prepare_coreos_boot.sh && \
+  echo 'STAGE 1 COMPLETED.' && \
+  /root/prepare_coreos_boot.sh $publicip $privateip $gateway_net $TOKEN && \
+  echo 'STAGE 2 COMPLETED.' "
+
+log "CoreOS installation finished. Final reboot..."
+# Reboot the system to newly installed CoreOS
+$LINODEAPI -c linode.shutdown -d LinodeID=$linodeid
+$LINODEAPI -c linode.boot -d LINODEID=$linodeid\&ConfigID=$coreoscfg
+
+#
+# Print summary info
+#
+log
+log "Node ${bold}${white}$NODE_NAME${reset} created and it is booting now. You should be able to log in a few seconds..."
+log "Public IP:  ${bold}${white}$publicip${reset}"
+log "Private IP: ${bold}${white}$privateip${reset}"
+log "Log in using, for example:" "ssh core@$publicip" # Note: we can't use here $USER as it's not available inside Docker (and it wouldn't be correct anyway)!
+log

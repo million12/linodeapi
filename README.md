@@ -1,35 +1,37 @@
-# Linode bash API for CoreOS deployment 
+# CoreOS deployment on Linode
 
-With this work you can easily deploy [CoreOS](https://coreos.com/) on [Linode](https://www.linode.com/) infrastructure. CoreOS is so far not available on Linode - with this script you can easily and quickly deploy CoreOS with your own cloud-config.
+With this work you can easily deploy [CoreOS](https://coreos.com/) on [Linode](https://www.linode.com/). As for today (Jan 2015) CoreOS is not available on Linode. With this work you can easily and quickly deploy CoreOS with your own cloud-config.
 
 ## Installation (with Docker)
 
-```
-docker pull million12/linode-coreos-api
-```
+This is the recommended - and the simplest, if you already familiar with Docker - way to use this tool. If you have you Docker daemon running, pull the image:
+`docker pull million12/linode-coreos-api`
 
 Then simply run:  
-`docker run --rm -t --env=GITHUB_KEY=$GITHUB_KEY --env=LINODE_KEY=$LINODE_KEY million12/linode-coreos-api`
+`docker run -t --env="LINODE_KEY=$LINODE_KEY" --rm million12/linode-coreos-api`
 
-To make it even easier, add an alias to your `.bashrc`, `.bash_profile` or `.profile` file:
+To make it even easier, add an alias to your `.bash_profile`:  
 ``` bash
-export GITHUB_KEY=yourkey  
 export LINODE_KEY=yourkey
-alias linode='docker run --rm -t --env=GITHUB_KEY=$GITHUB_KEY --env=LINODE_KEY=$LINODE_KEY million12/linode-coreos-api'
+alias linode='docker run -t --env="LINODE_KEY=$LINODE_KEY" --rm million12/linode-coreos-api'
 ```
 
-With this you can run simply `linode --help` or `linode --list_plans`. The Docker image has `ENTRYPOINT` set to `linode` script, therefore any extra param will be passed directly to `linode` script. 
+With this you can run simply `linode --help` or `linode --list-plans`. The Docker image has `ENTRYPOINT` set to `linode` script, therefore any extra param will be passed directly to `linode` script. 
 
-## Installation (manual)
+## Installation (manual, the old way)
 
 You will need to have few programs installed on your machine to be able to use this api. The list contains:  
-`curl`  
-`pwgen`  
-`sshpass`  
-`sudo`  
-`jq`
+* `curl`
+* `pwgen`
+* `sudo`
+* `jq`
+* `sshpass`  
+    Mac Users install:  
+    `brew install https://raw.github.com/eugeneoden/homebrew/eca9de1/Library/Formula/sshpass.rb`
 
-Once you have them all, run `./linode`. It will download required LinodeAPI macros. You can also symlink `linode` to your PATH to make it easily available everywhere.
+You can install all above using `yum install NAME` (RHEL) or `apt-get install NAME` (Fedora, Debian, Ubuntu) or `brew install NAME` (OSX).
+
+Once you have them all, run `./linode`. You can also symlink `linode` tool to your `$PATH` to make it available everywhere.
 
 ## Environment variables
 You need environmental variables with keys for Linode API access and GitHub for accessing your cloud-config file (which might be inside a private repository). Note: in the future we would like  See Linode/GitHub documentation.  
@@ -37,11 +39,9 @@ You need environmental variables with keys for Linode API access and GitHub for 
 [GitHub API Key documentation](https://developer.github.com/v3/oauth_authorizations/)  
 
 Variables:  
-`GITHUB_KEY=yourkey`  
 `LINODE_KEY=yourkey`
 
-you can easily export them by running in shell:  
-`export GITHUB_KEY=yourkey`  
+You can easily export them by running in shell:  
 `export LINODE_KEY=yourkey`
 
 ## Usage
@@ -51,14 +51,15 @@ Options:
 
 | Command | Details | Importance |
 |:--------|---------|:----------:|
-|`--node_name`|Name for your node | **Required** |
-|`--node_plan`|Plan of your choice. If not provided system will show you all available options. | **Required** |
-|`--datacenter`|Datacenter in which your node should be deployed. If not provided system will show you all available options. | **Required** |
-|`--config_local`|`yaml` config file path from local drive (If not provided, GitHub file need to be provided) | **Semi-Required** |
-|`--config_github`|GitHub `yaml` file link.(If not provided `--config_local` need to be provided.). |**Semi-Required**|
-|`--token`|ETCD Token Key for fleet deployment. If not provided program will generate one. |**Optional**|  
+|`--cloud-config`|***Content*** of the user-data config. You must provide it using this trick:<br />`--cloud-config="$(< path/to/your/cloud-config.yaml)` | **Required** |
+|`--node-name`|Name for your node | **Required** |
+|`--node-plan`|Plan of your choice. If not provided system will show you all available options. | Optional<br />Default: 1<br />(1CPU, 1GB RAM) |
+|`--datacenter`|Datacenter in which your node should be deployed. If not provided system will show you all available options. | Optional<br />Default: 2<br />(Dallas, TX) |
+|`--token`|ETCD Token Key for fleet deployment. If not provided program will generate one. |Optional|  
+|`--swap-disk-size`|Swap size in MB. Set to 0 to disable. Must be an integer value. That will decrease the CoreOS system partition size by provided amount. |Optional<br />Default: 2048|
+|`--extra-disk-size`|Extra partition (raw) size in MB to create next to default system partition. Must be an integer value. That will decrease the CoreOS system partition size by provided amount. |Optional<br />Default: 0|
 
-Quick lists:  
+Linode lists:  
 
 | Command | Details |
 |---------|---------|
@@ -66,19 +67,14 @@ Quick lists:
 |`--list_datacenters`|List all available datacenters|  
 
 ### Examples 
-Deploy node with your localfile `yaml` config and token for hooking up with already deployed fleet.   
-
-`linode --node_name elasticsearch --node_plan 2 --datacenter 7 --token f0f727cdc75b55aa12de9085d7f444a1 --config_local ~/my_config.yaml`  
-
-Deploy node with GitHub `yaml` config file and no ETCD token. (no fleet will be used in this exapmple)  
-
-`linode --node_name logstash --node_plan 1 --datacenter 7 --config_github https://raw.githubusercontent.com/million12/linodeapi/master/cloud-config.yaml`  
+Deploy node with `cloud-config.yaml` config:  
+`linode --node-name=test1 --node-plan=1 --datacenter=3 --cloud-config="$(< path/to/cloud-config.yaml)"`
 
 
 # Author(s)
 
 Author: Przemyslaw Ozgo (<linux@ozgo.info>)  
-Note: this work is strongly influenced by [rwky/Linode-Bash-API](https://github.com/rwky/Linode-Bash-API).
+Note: this work uses Linode API originally developed by [rwky/Linode-Bash-API](https://github.com/rwky/Linode-Bash-API).
 
 ---
 
