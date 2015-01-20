@@ -311,14 +311,15 @@ if [[ $SWAP_DISK_SIZE -ne 0 ]]; then
   log "Creating swap, size ${SWAP_DISK_SIZE} MB."
   $LINODEAPI -c linode.disk.create -d LinodeID=$linodeid\&Label=SWAP\&Type=swap\&Size=$SWAP_DISK_SIZE 1>/dev/null
 fi
+
 # Create Data Partition if provided space size by user and prepared disk list for Creating plans.
 if [[ $EXTRA_DISK_SIZE -ne 0 ]]; then
   log "Creating extra disk, size ${EXTRA_DISK_SIZE} MB."
   $LINODEAPI -c linode.disk.create -d LinodeID=$linodeid\&Label=Data\&Type=raw\&Size=$EXTRA_DISK_SIZE 1>/dev/null
-  diskids=$($LINODEAPI -c linode.disk.list -d LINODEID=$linodeid | grep DISKID | sed 's/^.*://' | xargs -n 4 echo | sed 's/ /,/g')
-else
-  diskids=$($LINODEAPI -c linode.disk.list -d LINODEID=$linodeid | grep DISKID | sed 's/^.*://' | xargs -n 3 echo | sed 's/ /,/g')
 fi
+
+diskids=$($LINODEAPI -c linode.disk.list -d LINODEID=$linodeid | grep DISKID | sed 's/^.*://' | xargs echo -n | sed 's/ /,/g')
+log "Created disk IDs: $diskids."
 
 # Create Install Profile for Installation of CoreOS
 instcfg=$($LINODEAPI -c linode.config.create -d LINODEID=$linodeid\&Label=Install\&KERNELID=138\&DiskList=$diskids\&RootDeviceNum=1 | grep ConfigID | sed 's/^.*://')

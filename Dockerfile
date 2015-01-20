@@ -15,7 +15,8 @@ ADD . /usr/local/share/
 
 RUN \
   chmod +x /usr/local/share/linode && \
-  ln -s /usr/local/share/linode /usr/local/bin/linode
+  ln -s /usr/local/share/linode /usr/local/bin/linode && \
+  ln -s /usr/local/share/linodeapi /usr/local/bin/linodeapi
 
 ENV TERM xterm-256color
 
