@@ -59,12 +59,12 @@ Options:
 |`--swap-disk-size`|Swap size in MB. Set to 0 to disable. Must be an integer value. That will decrease the CoreOS system partition size by provided amount. |Optional<br />Default: 2048|
 |`--extra-disk-size`|Extra partition (raw) size in MB to create next to default system partition. Must be an integer value. That will decrease the CoreOS system partition size by provided amount. |Optional<br />Default: 0|
 
-Linode lists:  
+Linode lists:
 
 | Command | Details |
 |---------|---------|
-|`--list_plans`|List all available plans|
-|`--list_datacenters`|List all available datacenters|  
+|`--list-plans`|List all available plans|
+|`--list-datacenters`|List all available datacenters|  
 
 ### Examples 
 Deploy node with `cloud-config.yaml` config:  

@@ -1,6 +1,6 @@
 #cloud-config
 
-hostname: hostname
+hostname: test-hostname
 coreos:
   update:
     group: stable

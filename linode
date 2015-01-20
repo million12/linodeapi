@@ -200,7 +200,6 @@ do
 
       -h|--help (-h)            help
       -n|--node-name (-n)       Node name (required)
-      -s|--data-size (-s)       Size of data partition (optional)
       -p|--node-plan (-p)       Node plan (required)
       -d|--datacenter (-d)      Datacenter of your choice (required)
       -t|--token (-t)           ETCD Token
