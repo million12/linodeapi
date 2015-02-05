@@ -286,10 +286,9 @@ fi
 log "Configuring node networking..."
 # Get linode Public/Private IP and gateway (note: the private ip has to be added first!)
 $LINODEAPI -c linode.ip.addprivate -d LINODEID=$linodeid 1>/dev/null
-# Contains pure list of IP addresses, one per-line. The 1st one is public.
-iplist=$($LINODEAPI -c linode.ip.list -d LinodeID=$linodeid | grep -E 'IPADDRESS\W' | sed -E 's/[^\.0-9]//g')
-publicip=$(echo "$iplist" | sed -n 1p) # get the 1st IP addr
-privateip=$(echo "$iplist" | sed -n 2p) # get the 2nd IP addr
+# Set public/private addresses.
+publicip=$($LINODEAPI -c linode.ip.list -d LinodeID=$linodeid -F json | jq -r '.DATA[] | select (.ISPUBLIC==1) | .IPADDRESS' | sed -n 1p )
+privateip=$($LINODEAPI -c linode.ip.list -d LinodeID=$linodeid -F json | jq -r '.DATA[] | select (.ISPUBLIC==0) | .IPADDRESS' | sed -n 1p)
 gateway_net=$(echo $privateip | awk -F. '{print $1 "." $2 "." $3}') # private IP, but with no last segment
 log "Public IP: ${bold}${white}$publicip${reset}, private IP: ${bold}${white}$privateip${reset}, gateway: ${bold}${white}$gateway_net.1${reset}."
 
