@@ -23,6 +23,22 @@ coreos:
     - name: fleet.service
       command: start
 
+#Private Network settings for Linode. 
+    - name: private-networking.service
+      command: start
+      content: |
+        [Unit]
+        Description=Linode Private Networking.
+        After=network.target
+        Before=docker.service
+        
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        # Set Private Network
+        ExecStartPre=-/usr/bin/ifconfig eth0 add $private_ipv4
+        ExecStart=-/usr/bin/ifconfig eth0:0 netmask 255.255.128.0
+
 users:
   - name: username
     primary-group: wheel
@@ -36,16 +52,3 @@ write_files:
     content: |
       COREOS_PUBLIC_IPV4=$public_ipv4
       COREOS_PRIVATE_IPV4=$private_ipv4
-
-# Linode Private network tweak
-  - path: /etc/systemd/network/50-static.network
-    content: |
-      [Match]
-      Name=eth0
-
-      [Network]
-      Address=$public_ipv4/24
-      Address=$private_ipv4/17
-      Gateway=$gateway.1
-      DNS=8.8.8.8
-      DNS=8.8.4.4
